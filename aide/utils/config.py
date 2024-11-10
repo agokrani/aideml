@@ -60,7 +60,6 @@ class ExecConfig:
     agent_file_name: str
     format_tb_ipython: bool
 
-
 @dataclass
 class Config(Hashable):
     data_dir: Path
@@ -79,6 +78,8 @@ class Config(Hashable):
     exp_name: str
 
     exec: ExecConfig
+    generate_report: bool
+    report: StageConfig
     agent: AgentConfig
 
 

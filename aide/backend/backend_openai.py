@@ -25,7 +25,6 @@ OPENAI_TIMEOUT_EXCEPTIONS = (
     openai.InternalServerError,
 )
 
-
 @once
 def _setup_openai_client():
     global _client

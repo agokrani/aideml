@@ -8,9 +8,11 @@ from . import backend
 from .agent import Agent
 from .interpreter import Interpreter
 from .journal import Journal, Node
+from .journal2report import journal2report
 from omegaconf import OmegaConf
 from rich.columns import Columns
 from rich.console import Group
+from rich.live import Live
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.progress import (
@@ -188,15 +190,29 @@ def run():
             title=f'[b]AIDE is working on experiment: [bold green]"{cfg.exp_name}[/b]"',
             subtitle="Press [b]Ctrl+C[/b] to stop the run",
         )
-
-    while global_step < cfg.agent.steps:
-        agent.step(exec_callback=exec_callback)
-        # on the last step, print the tree
-        if global_step == cfg.agent.steps - 1:
-            logger.info(journal_to_string_tree(journal))
-        save_run(cfg, journal)
-        global_step = len(journal)
+    with Live(
+        generate_live(),
+        refresh_per_second=16,
+        screen=True,
+    ) as live:
+        while global_step < cfg.agent.steps:
+            agent.step(exec_callback=exec_callback)
+            # on the last step, print the tree
+            if global_step == cfg.agent.steps - 1:
+                logger.info(journal_to_string_tree(journal))
+            save_run(cfg, journal)
+            global_step = len(journal)
+            live.update(generate_live())
     interpreter.cleanup_session()
+
+    if cfg.generate_report:
+        print("Generating final report from journal...")
+        report = journal2report(journal, task_desc, cfg.report)
+        print(report)
+        report_file_path = cfg.log_dir / 'report.md'
+        with open(report_file_path, "w") as f:
+            f.write(report)
+        print('Report written to file:', report_file_path)
 
 
 if __name__ == "__main__":
