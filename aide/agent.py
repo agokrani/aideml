@@ -30,52 +30,6 @@ class SubmitReview(BaseModel):
     metric: float = Field(description="If the code ran successfully, report the value of the validation metric. Otherwise, leave it null.")
     lower_is_better: bool = Field(description="true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy).")
 
-
-# review_func_spec = FunctionSpec(
-#     name="submit_review",
-#     json_schema={
-#         "type": "object",
-#         "properties": {
-#             "is_bug": {
-#                 "type": "boolean",
-#                 "description": "true if the output log shows that the execution failed or has some bug, otherwise false.",
-#             },
-#             "has_csv_submission": {
-#                 "type": "boolean",
-#                 "description": "true if the code saves the predictions on the test data"
-#                 " in a `submission.csv` file in the `./submission/` directory, otherwise false."
-#                 " Note that the file MUST be saved in the ./submission/ directory for this to be evaluated as true."
-#                 " Otherwise, it should be evaluated as false."
-#                 " You can assume the ./submission/ directory exists and is writable.",
-#             },
-#             "summary": {
-#                 "type": "string",
-#                 "description": "write a short summary (2-3 sentences) describing "
-#                 " the empirical findings. Alternatively mention if there is a bug or"
-#                 " the submission.csv was not properly produced."
-#                 " DO NOT suggest fixes or improvements.",
-#             },
-#             "metric": {
-#                 "type": "number",
-#                 "description": "If the code ran successfully, report the value of the validation metric. Otherwise, leave it null.",
-#             },
-#             "lower_is_better": {
-#                 "type": "boolean",
-#                 "description": "true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy).",
-#             },
-#         },
-#         "required": [
-#             "is_bug",
-#             "has_csv_submission",
-#             "summary",
-#             "metric",
-#             "lower_is_better",
-#         ],
-#     },
-#     description="Submit a review evaluating the output of the training script.",
-# )
-
-
 class Agent:
     def __init__(
         self,
