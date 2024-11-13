@@ -1,17 +1,14 @@
 # path to the task data directory
-data_dir: /Users/agokrani/Documents/git/aideml/aide/example_tasks/house_prices
+data_dir: null
 
 # either provide a path to a plaintext file describing the task
-desc_file: /Users/agokrani/Documents/git/aideml/aide/example_tasks/house_prices.md
+desc_file: null
 # or provide the task goal (and optionally evaluation information) as arguments
 goal: null
 eval: null
 
 log_dir: logs
-log_level: INFO
 workspace_dir: workspaces
-debug: False
-
 
 # whether to unzip any archives in the data directory
 preprocess_data: True
@@ -19,7 +16,7 @@ preprocess_data: True
 # copying is recommended to prevent the agent from accidentally modifying the original data
 copy_data: True
 
-exp_name: 0-transparent-manipulative-prawn-gpt4o-sonnet-feedback-debug # a random experiment name will be generated if not provided
+exp_name: null # a random experiment name will be generated if not provided
 
 # settings for code execution
 exec:
@@ -30,34 +27,28 @@ exec:
 generate_report: True
 # LLM settings for final report from journal
 report:
-  model: gpt-4o
+  model: gpt-4-turbo
   temp: 1.0
 
 # agent hyperparams
 agent:
   # how many improvement iterations to run
   steps: 20
-  # total time available to agent
-  time_limit: 86400 # 24 hrs (purely informational, implementation is user's resp)
   # whether to instruct the agent to use CV (set to 1 to disable)
   k_fold_validation: 5
   # whether to instruct the agent to generate a prediction function
   expose_prediction: False
   # whether to provide the agent with a preview of the data
   data_preview: True
-  # whether to convert system messages into user messages
-  convert_system_to_user: False
-  # whether to obfuscate that we're doing kaggle
-  obfuscate: False
 
   # LLM settings for coding
   code:
-    model: gpt-4o
+    model: gpt-4-turbo
     temp: 0.5
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
-    model: claude-3-5-sonnet-20241022
+    model: gpt-4-turbo
     temp: 0.5
 
   # hyperparameters for the tree search
