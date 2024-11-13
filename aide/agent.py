@@ -3,7 +3,7 @@ import logging
 import random
 import time
 from typing import Any, Callable, cast
-
+from pydantic import BaseModel, Field
 import humanize
 from .backend import FunctionSpec, compile_prompt_to_md, query
 from .interpreter import ExecutionResult
@@ -22,49 +22,58 @@ def format_time(time_in_sec: int):
 
 ExecCallbackType = Callable[[str, bool], ExecutionResult]
 
-review_func_spec = FunctionSpec(
-    name="submit_review",
-    json_schema={
-        "type": "object",
-        "properties": {
-            "is_bug": {
-                "type": "boolean",
-                "description": "true if the output log shows that the execution failed or has some bug, otherwise false.",
-            },
-            "has_csv_submission": {
-                "type": "boolean",
-                "description": "true if the code saves the predictions on the test data"
-                " in a `submission.csv` file in the `./submission/` directory, otherwise false."
-                " Note that the file MUST be saved in the ./submission/ directory for this to be evaluated as true."
-                " Otherwise, it should be evaluated as false."
-                " You can assume the ./submission/ directory exists and is writable.",
-            },
-            "summary": {
-                "type": "string",
-                "description": "write a short summary (2-3 sentences) describing "
-                " the empirical findings. Alternatively mention if there is a bug or"
-                " the submission.csv was not properly produced."
-                " DO NOT suggest fixes or improvements.",
-            },
-            "metric": {
-                "type": "number",
-                "description": "If the code ran successfully, report the value of the validation metric. Otherwise, leave it null.",
-            },
-            "lower_is_better": {
-                "type": "boolean",
-                "description": "true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy).",
-            },
-        },
-        "required": [
-            "is_bug",
-            "has_csv_submission",
-            "summary",
-            "metric",
-            "lower_is_better",
-        ],
-    },
-    description="Submit a review evaluating the output of the training script.",
-)
+class SubmitReview(BaseModel):
+    """Submit a review evaluating the output of the training script."""
+    is_bug: bool = Field(description="true if the output log shows that the execution failed or has some bug, otherwise false.")
+    has_csv_submission: bool = Field(description="true if the code saves the predictions on the test data")
+    summary: str = Field(description="write a short summary (2-3 sentences) describing the empirical findings. Alternatively mention if there is a bug or the submission.csv was not properly produced. DO NOT suggest fixes or improvements.")
+    metric: float = Field(description="If the code ran successfully, report the value of the validation metric. Otherwise, leave it null.")
+    lower_is_better: bool = Field(description="true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy).")
+
+
+# review_func_spec = FunctionSpec(
+#     name="submit_review",
+#     json_schema={
+#         "type": "object",
+#         "properties": {
+#             "is_bug": {
+#                 "type": "boolean",
+#                 "description": "true if the output log shows that the execution failed or has some bug, otherwise false.",
+#             },
+#             "has_csv_submission": {
+#                 "type": "boolean",
+#                 "description": "true if the code saves the predictions on the test data"
+#                 " in a `submission.csv` file in the `./submission/` directory, otherwise false."
+#                 " Note that the file MUST be saved in the ./submission/ directory for this to be evaluated as true."
+#                 " Otherwise, it should be evaluated as false."
+#                 " You can assume the ./submission/ directory exists and is writable.",
+#             },
+#             "summary": {
+#                 "type": "string",
+#                 "description": "write a short summary (2-3 sentences) describing "
+#                 " the empirical findings. Alternatively mention if there is a bug or"
+#                 " the submission.csv was not properly produced."
+#                 " DO NOT suggest fixes or improvements.",
+#             },
+#             "metric": {
+#                 "type": "number",
+#                 "description": "If the code ran successfully, report the value of the validation metric. Otherwise, leave it null.",
+#             },
+#             "lower_is_better": {
+#                 "type": "boolean",
+#                 "description": "true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy).",
+#             },
+#         },
+#         "required": [
+#             "is_bug",
+#             "has_csv_submission",
+#             "summary",
+#             "metric",
+#             "lower_is_better",
+#         ],
+#     },
+#     description="Submit a review evaluating the output of the training script.",
+# )
 
 
 class Agent:
@@ -241,7 +250,6 @@ class Agent:
 
         if self.acfg.data_preview:
             prompt["Data Overview"] = self.data_preview
-
         plan, code = self.plan_and_code_query(prompt)
         new_node = Node(plan=plan, code=code)
         logger.info(f"Drafted new node {new_node.id}")
@@ -420,7 +428,7 @@ class Agent:
             query(
                 system_message=prompt,
                 user_message=None,
-                func_spec=review_func_spec,
+                function=SubmitReview,
                 model=self.acfg.feedback.model,
                 temperature=self.acfg.feedback.temp,
                 convert_system_to_user=self.acfg.convert_system_to_user,

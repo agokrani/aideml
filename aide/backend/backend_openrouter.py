@@ -6,6 +6,7 @@ import time
 
 from funcy import notnone, once, select_values
 import openai
+from pydantic import BaseModel
 
 from aide.backend.utils import (
     FunctionSpec,
@@ -38,14 +39,14 @@ def _setup_openrouter_client():
 def query(
     system_message: str | None,
     user_message: str | None,
-    func_spec: FunctionSpec | None = None,
+    function: BaseModel | None = None,
     convert_system_to_user: bool = False,
     **model_kwargs,
 ) -> tuple[OutputType, float, int, int, dict]:
     _setup_openrouter_client()
     filtered_kwargs: dict = select_values(notnone, model_kwargs)  # type: ignore
 
-    if func_spec is not None:
+    if function is not None:
         raise NotImplementedError(
             "We are not supporting function calling in OpenRouter for now."
         )

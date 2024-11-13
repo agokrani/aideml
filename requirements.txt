@@ -92,3 +92,6 @@ pyocr
 pyarrow
 xlrd
 backoff
+langchain
+langchain-core
+langchain-anthropic

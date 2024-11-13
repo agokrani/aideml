@@ -1,7 +1,10 @@
+
+import sys
 import atexit
 import logging
 import shutil
-import sys
+
+import argparse
 
 from . import backend
 
@@ -92,7 +95,11 @@ def journal_to_string_tree(journal: Journal) -> str:
 
 
 def run():
-    cfg = load_cfg()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config-path", type=str, help="Path to the configuration file")
+    args, _ = parser.parse_known_args()
+    
+    cfg = load_cfg(args.config_path)
     log_format = "[%(asctime)s] %(levelname)s: %(message)s"
     logging.basicConfig(
         level=getattr(logging, cfg.log_level.upper()), format=log_format, handlers=[]
@@ -190,19 +197,28 @@ def run():
             title=f'[b]AIDE is working on experiment: [bold green]"{cfg.exp_name}[/b]"',
             subtitle="Press [b]Ctrl+C[/b] to stop the run",
         )
-    with Live(
-        generate_live(),
-        refresh_per_second=16,
-        screen=True,
-    ) as live:
+    if cfg.debug: 
         while global_step < cfg.agent.steps:
             agent.step(exec_callback=exec_callback)
             # on the last step, print the tree
             if global_step == cfg.agent.steps - 1:
                 logger.info(journal_to_string_tree(journal))
             save_run(cfg, journal)
-            global_step = len(journal)
-            live.update(generate_live())
+            global_step = len(journal)    
+    else: 
+        with Live(
+           generate_live(),
+           refresh_per_second=16,
+           screen=True,
+        ) as live:
+            while global_step < cfg.agent.steps:
+                agent.step(exec_callback=exec_callback)
+                # on the last step, print the tree
+                if global_step == cfg.agent.steps - 1:
+                    logger.info(journal_to_string_tree(journal))
+                save_run(cfg, journal)
+                global_step = len(journal)
+                live.update(generate_live())
     interpreter.cleanup_session()
 
     if cfg.generate_report:

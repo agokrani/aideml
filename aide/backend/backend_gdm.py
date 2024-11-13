@@ -9,6 +9,7 @@ import google.generativeai as genai
 from google.generativeai.generative_models import generation_types
 
 from funcy import once
+from pydantic import BaseModel
 from .utils import FunctionSpec, OutputType, backoff_create
 
 logger = logging.getLogger("aide")
@@ -55,7 +56,7 @@ def _setup_gdm_client(model_name: str, temperature: float):
 def query(
     system_message: str | None,
     user_message: str | None,
-    func_spec: FunctionSpec | None = None,
+    function: BaseModel | None = None,
     convert_system_to_user: bool = False,
     **model_kwargs,
 ) -> tuple[OutputType, float, int, int, dict]:
@@ -64,7 +65,7 @@ def query(
 
     _setup_gdm_client(model, temperature)
 
-    if func_spec is not None:
+    if function is not None:
         raise NotImplementedError(
             "GDM supports function calling but we won't use it for now."
         )

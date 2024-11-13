@@ -3,6 +3,10 @@
 import json
 import logging
 import time
+import openai
+from typing import Any, Dict, Type, Union
+
+from pydantic import BaseModel
 
 from aide.backend.utils import (
     FunctionSpec,
@@ -11,7 +15,10 @@ from aide.backend.utils import (
     backoff_create,
 )
 from funcy import notnone, once, select_values
-import openai
+from langchain_core.utils.function_calling import convert_to_openai_tool
+
+
+
 
 logger = logging.getLogger("aide")
 
@@ -34,7 +41,7 @@ def _setup_openai_client():
 def query(
     system_message: str | None,
     user_message: str | None,
-    func_spec: FunctionSpec | None = None,
+    function: BaseModel | None = None,
     convert_system_to_user: bool = False,
     **model_kwargs,
 ) -> tuple[OutputType, float, int, int, dict]:
@@ -43,10 +50,11 @@ def query(
 
     messages = opt_messages_to_list(system_message, user_message, convert_system_to_user=convert_system_to_user)
 
-    if func_spec is not None:
-        filtered_kwargs["tools"] = [func_spec.as_openai_tool_dict]
+    if function is not None:
+        func_spec = OpenAIFunctionSpec(function)
+        filtered_kwargs["tools"] = [func_spec.tool_dict]
         # force the model the use the function
-        filtered_kwargs["tool_choice"] = func_spec.openai_tool_choice_dict
+        filtered_kwargs["tool_choice"] = func_spec.tool_choice_dict
 
     t0 = time.time()
     completion = backoff_create(
@@ -59,14 +67,14 @@ def query(
 
     choice = completion.choices[0]
 
-    if func_spec is None:
+    if function is None:
         output = choice.message.content
     else:
         assert (
             choice.message.tool_calls
         ), f"function_call is empty, it is not a function call: {choice.message}"
         assert (
-            choice.message.tool_calls[0].function.name == func_spec.name
+            choice.message.tool_calls[0].function.name == function.__name__
         ), "Function name mismatch"
         try:
             output = json.loads(choice.message.tool_calls[0].function.arguments)
@@ -86,3 +94,20 @@ def query(
     }
 
     return output, req_time, in_tokens, out_tokens, info
+
+
+class OpenAIFunctionSpec(FunctionSpec):
+
+    def __init__(self, tool: Union[Dict[str, Any], Type]):
+        super().__init__(tool)
+
+    @property
+    def tool_dict(self):
+        return convert_to_openai_tool(self.tool)
+
+    @property
+    def tool_choice_dict(self):
+        return {
+            "type": "function",
+            "function": {"name": self.tool.__name__},
+        }

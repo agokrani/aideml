@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable, Dict, Type, Union
 
 import jsonschema
 from dataclasses_json import DataClassJsonMixin
@@ -82,29 +82,44 @@ def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
 
 @dataclass
 class FunctionSpec(DataClassJsonMixin):
-    name: str
-    json_schema: dict  # JSON schema
-    description: str
-
-    def __post_init__(self):
-        # validate the schema
-        jsonschema.Draft7Validator.check_schema(self.json_schema)
+    tool: Union[Dict[str, Any], Type] # Pydantic Object to be converted to OpenAI tool dict or Anthropic tool class 
+    
+    def __init__(self, tool: Union[Dict[str, Any], Type]):
+        self.tool = tool
 
     @property
-    def as_openai_tool_dict(self):
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.json_schema,
-            },
-            "strict": True,
-        }
-
+    def tool_dict(self):
+        pass
+    
     @property
-    def openai_tool_choice_dict(self):
-        return {
-            "type": "function",
-            "function": {"name": self.name},
-        }
+    def tool_choice_dict(self):
+        pass 
+
+# @dataclass
+# class FunctionSpec(DataClassJsonMixin):
+#     name: str
+#     json_schema: dict  # JSON schema
+#     description: str
+
+#     def __post_init__(self):
+#         # validate the schema
+#         jsonschema.Draft7Validator.check_schema(self.json_schema)
+
+#     @property
+#     def as_openai_tool_dict(self):
+#         return {
+#             "type": "function",
+#             "function": {
+#                 "name": self.name,
+#                 "description": self.description,
+#                 "parameters": self.json_schema,
+#             },
+#             "strict": True,
+#         }
+
+#     @property
+#     def openai_tool_choice_dict(self):
+#         return {
+#             "type": "function",
+#             "function": {"name": self.name},
+#         }

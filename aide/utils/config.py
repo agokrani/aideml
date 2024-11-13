@@ -71,6 +71,7 @@ class Config(Hashable):
     log_dir: Path
     log_level: str
     workspace_dir: Path
+    debug: bool
 
     preprocess_data: bool
     copy_data: bool
@@ -96,7 +97,7 @@ def _get_next_logindex(dir: Path) -> int:
 
 
 def _load_cfg(
-    path: Path = Path(__file__).parent / "config.yaml", use_cli_args=True
+    path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml", use_cli_args=True
 ) -> Config:
     cfg = OmegaConf.load(path)
     if use_cli_args:
@@ -104,12 +105,15 @@ def _load_cfg(
     return cfg
 
 
-def load_cfg(path: Path = Path(__file__).parent / "config.yaml") -> Config:
+def load_cfg(path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml") -> Config:
     """Load config from .yaml file and CLI args, and set up logging directory."""
     return prep_cfg(_load_cfg(path))
 
 
 def prep_cfg(cfg: Config):
+    if "--config-path" in cfg.keys():
+        cfg.pop("--config-path")
+    
     if cfg.data_dir is None:
         raise ValueError("`data_dir` must be provided.")
 

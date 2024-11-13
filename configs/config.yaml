@@ -1,8 +1,8 @@
 # path to the task data directory
-data_dir: null
+data_dir: /Users/agokrani/Documents/git/aideml/aide/example_tasks/house_prices
 
 # either provide a path to a plaintext file describing the task
-desc_file: null
+desc_file: /Users/agokrani/Documents/git/aideml/aide/example_tasks/house_prices.md
 # or provide the task goal (and optionally evaluation information) as arguments
 goal: null
 eval: null
@@ -10,6 +10,8 @@ eval: null
 log_dir: logs
 log_level: INFO
 workspace_dir: workspaces
+debug: False
+
 
 # whether to unzip any archives in the data directory
 preprocess_data: True
@@ -17,7 +19,7 @@ preprocess_data: True
 # copying is recommended to prevent the agent from accidentally modifying the original data
 copy_data: True
 
-exp_name: null # a random experiment name will be generated if not provided
+exp_name: 0-transparent-manipulative-prawn-gpt4o-sonnet-feedback-debug # a random experiment name will be generated if not provided
 
 # settings for code execution
 exec:
@@ -28,7 +30,7 @@ exec:
 generate_report: True
 # LLM settings for final report from journal
 report:
-  model: gpt-4-turbo
+  model: gpt-4o
   temp: 1.0
 
 # agent hyperparams
@@ -50,12 +52,12 @@ agent:
 
   # LLM settings for coding
   code:
-    model: gpt-4-turbo
+    model: gpt-4o
     temp: 0.5
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
-    model: gpt-4-turbo
+    model: claude-3-5-sonnet-20241022
     temp: 0.5
 
   # hyperparameters for the tree search

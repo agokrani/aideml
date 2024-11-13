@@ -1,4 +1,6 @@
 import logging
+
+from pydantic import BaseModel
 from . import backend_anthropic, backend_openai, backend_openrouter, backend_gdm
 from .utils import FunctionSpec, OutputType, PromptType, compile_prompt_to_md
 
@@ -31,7 +33,7 @@ def query(
     model: str,
     temperature: float | None = None,
     max_tokens: int | None = None,
-    func_spec: FunctionSpec | None = None,
+    function: BaseModel | None = None,
     convert_system_to_user: bool = False,
     **model_kwargs,
 ) -> OutputType:
@@ -45,10 +47,10 @@ def query(
         model (str): string identifier for the model to use (e.g. "gpt-4-turbo")
         temperature (float | None, optional): Temperature to sample at. Defaults to the model-specific default.
         max_tokens (int | None, optional): Maximum number of tokens to generate. Defaults to the model-specific max tokens.
-        func_spec (FunctionSpec | None, optional): Optional FunctionSpec object defining a function call. If given, the return value will be a dict.
+        function (BaseModel | None, optional): Optional BaseModel object defining a function call. If given, the return value will be a dict.
 
     Returns:
-        OutputType: A string completion if func_spec is None, otherwise a dict with the function call details.
+        OutputType: A string completion if function is None, otherwise a dict with the function call details.
     """
 
     model_kwargs = model_kwargs | {
@@ -64,15 +66,15 @@ def query(
     user_message = compile_prompt_to_md(user_message) if user_message else None
     if user_message:
         logger.info(f"user: {user_message}", extra={"verbose": True})
-    if func_spec:
-        logger.info(f"function spec: {func_spec.to_dict()}", extra={"verbose": True})
+    if function:
+        logger.info(f"function spec: {function.model_json_schema()}", extra={"verbose": True})
 
     provider = determine_provider(model)
     query_func = provider_to_query_func[provider]
     output, req_time, in_tok_count, out_tok_count, info = query_func(
         system_message=system_message,
         user_message=user_message,
-        func_spec=func_spec,
+        function=function,
         convert_system_to_user=convert_system_to_user,
         **model_kwargs,
     )
