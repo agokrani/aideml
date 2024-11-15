@@ -178,8 +178,18 @@ def run():
             f"Agent workspace directory:\n[yellow]▶ {str(cfg.workspace_dir)}",
             f"Experiment log directory:\n[yellow]▶ {str(cfg.log_dir)}",
         ]
+
+        # Truncate the task description to a fixed number of lines
+        task_desc_lines = task_desc_str.strip().split('\n')
+        max_lines = 10  # Number of lines to display
+        if len(task_desc_lines) > max_lines:
+            task_desc_display = '\n'.join(task_desc_lines[:max_lines])
+            task_desc_display += "..."
+        else:
+            task_desc_display = task_desc_str.strip()
+
         left = Group(
-            Panel(Text(task_desc_str.strip()), title="Task description"),
+            Panel(Text(task_desc_display), title="Task description"),
             prog,
             status,
         )
