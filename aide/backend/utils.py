@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Type, Union
+from typing import Any, Callable, Dict, Type, Union, List
 
 import jsonschema
 from dataclasses_json import DataClassJsonMixin
@@ -52,7 +52,7 @@ def backoff_create(
 
 def opt_messages_to_list(
     system_message: str | None,
-    user_message: str | None,
+    user_messages: List | None,
     convert_system_to_user: bool = False,
 ) -> list[dict[str, str]]:
     messages = []
@@ -61,8 +61,9 @@ def opt_messages_to_list(
             messages.append({"role": "user", "content": system_message})
         else:
             messages.append({"role": "system", "content": system_message})
-    if user_message:
-        messages.append({"role": "user", "content": user_message})
+    if user_messages:
+        for user_message in user_messages:
+            messages.append({"role": "user", "content": user_message})
     return messages
 
 
@@ -82,10 +83,10 @@ def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
 
 @dataclass
 class FunctionSpec(DataClassJsonMixin):
-    tool: Union[Dict[str, Any], Type] # Pydantic Object to be converted to OpenAI tool dict or Anthropic tool class 
+    tools: Union[List, Dict[str, Any], Type] # Pydantic Object to be converted to OpenAI tool dict or Anthropic tool class 
     
-    def __init__(self, tool: Union[Dict[str, Any], Type]):
-        self.tool = tool
+    def __init__(self, tools: Union[List, Dict[str, Any], Type]):
+        self.tools = tools
 
     @property
     def tool_dict(self):

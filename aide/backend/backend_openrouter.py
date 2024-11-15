@@ -3,7 +3,7 @@
 import logging
 import os
 import time
-
+from typing import List
 from funcy import notnone, once, select_values
 import openai
 from pydantic import BaseModel
@@ -38,26 +38,27 @@ def _setup_openrouter_client():
 
 def query(
     system_message: str | None,
-    user_message: str | None,
-    function: BaseModel | None = None,
+    user_messages: List | None,
+    functions: BaseModel | List | None = None,
     convert_system_to_user: bool = False,
     **model_kwargs,
 ) -> tuple[OutputType, float, int, int, dict]:
     _setup_openrouter_client()
     filtered_kwargs: dict = select_values(notnone, model_kwargs)  # type: ignore
 
-    if function is not None:
+    if functions is not None:
         raise NotImplementedError(
             "We are not supporting function calling in OpenRouter for now."
         )
 
     # in case some backends dont support system roles, just convert everything to user
-    messages = [
-        {"role": "user", "content": message}
-        for message in [system_message, user_message]
-        if message
-    ]
-
+    messages = []
+    if system_message:
+        messages.append({"role": "user", "content": system_message})
+    for message in user_messages:
+        if message:
+            messages.append({"role": "user", "content": message})
+    
     t0 = time.time()
     completion = backoff_create(
         _client.chat.completions.create,
@@ -73,8 +74,9 @@ def query(
     )
     req_time = time.time() - t0
 
-    output = completion.choices[0].message.content
-
+    # output = completion.choices[0].message.content
+    output = completion.choices[0].message
+    
     in_tokens = completion.usage.prompt_tokens
     out_tokens = completion.usage.completion_tokens
 

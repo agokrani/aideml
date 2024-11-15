@@ -1,5 +1,5 @@
 import logging
-
+from typing import List
 from pydantic import BaseModel
 from . import backend_anthropic, backend_openai, backend_openrouter, backend_gdm
 from .utils import FunctionSpec, OutputType, PromptType, compile_prompt_to_md
@@ -29,11 +29,11 @@ provider_to_query_func = {
 
 def query(
     system_message: PromptType | None,
-    user_message: PromptType | None,
+    user_messages: List | None,
     model: str,
     temperature: float | None = None,
     max_tokens: int | None = None,
-    function: BaseModel | None = None,
+    functions: BaseModel | List | None = None,
     convert_system_to_user: bool = False,
     **model_kwargs,
 ) -> OutputType:
@@ -63,18 +63,23 @@ def query(
     system_message = compile_prompt_to_md(system_message) if system_message else None
     if system_message:
         logger.info(f"system: {system_message}", extra={"verbose": True})
-    user_message = compile_prompt_to_md(user_message) if user_message else None
-    if user_message:
-        logger.info(f"user: {user_message}", extra={"verbose": True})
-    if function:
-        logger.info(f"function spec: {function.model_json_schema()}", extra={"verbose": True})
+    compiled_user_messages = [compile_prompt_to_md(msg) for msg in user_messages] if user_messages else []
+    if compiled_user_messages:
+        for idx, msg in enumerate(compiled_user_messages):
+            logger.info(f"user message {idx}: {msg}", extra={"verbose": True})
+    if functions is not None:
+        if isinstance(functions, list):
+            for idx, function in enumerate(functions):
+                logger.info(f"function {idx} spec: {function.model_json_schema()}", extra={"verbose": True})
+        else:
+            logger.info(f"function spec: {functions.model_json_schema()}", extra={"verbose": True})
 
     provider = determine_provider(model)
     query_func = provider_to_query_func[provider]
     output, req_time, in_tok_count, out_tok_count, info = query_func(
         system_message=system_message,
-        user_message=user_message,
-        function=function,
+        user_messages=user_messages,
+        functions=functions,
         convert_system_to_user=convert_system_to_user,
         **model_kwargs,
     )

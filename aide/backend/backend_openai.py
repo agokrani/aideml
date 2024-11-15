@@ -4,9 +4,15 @@ import json
 import logging
 import time
 import openai
-from typing import Any, Dict, Type, Union
 
 from pydantic import BaseModel
+from typing import (
+    Any, 
+    Dict, 
+    Type, 
+    Union, 
+    List
+)
 
 from aide.backend.utils import (
     FunctionSpec,
@@ -40,21 +46,24 @@ def _setup_openai_client():
 
 def query(
     system_message: str | None,
-    user_message: str | None,
-    function: BaseModel | None = None,
+    user_messages: List | None,
+    functions: BaseModel | List | None = None,
     convert_system_to_user: bool = False,
     **model_kwargs,
 ) -> tuple[OutputType, float, int, int, dict]:
     _setup_openai_client()
     filtered_kwargs: dict = select_values(notnone, model_kwargs)  # type: ignore
 
-    messages = opt_messages_to_list(system_message, user_message, convert_system_to_user=convert_system_to_user)
+    messages = opt_messages_to_list(system_message, user_messages, convert_system_to_user=convert_system_to_user)
 
-    if function is not None:
-        func_spec = OpenAIFunctionSpec(function)
-        filtered_kwargs["tools"] = [func_spec.tool_dict]
-        # force the model the use the function
+    if functions is not None:
+        func_spec = OpenAIFunctionSpec(functions)
+        filtered_kwargs["tools"] = func_spec.tool_dict
         filtered_kwargs["tool_choice"] = func_spec.tool_choice_dict
+        
+        # Disable parallel tool calls 
+        # TODO: To allow it in funture
+        filtered_kwargs["parallel_tool_calls"] = False
 
     t0 = time.time()
     completion = backoff_create(
@@ -66,23 +75,26 @@ def query(
     req_time = time.time() - t0
 
     choice = completion.choices[0]
-
-    if function is None:
-        output = choice.message.content
-    else:
-        assert (
-            choice.message.tool_calls
-        ), f"function_call is empty, it is not a function call: {choice.message}"
-        assert (
-            choice.message.tool_calls[0].function.name == function.__name__
-        ), "Function name mismatch"
-        try:
-            output = json.loads(choice.message.tool_calls[0].function.arguments)
-        except json.JSONDecodeError as e:
-            logger.error(
-                f"Error decoding the function arguments: {choice.message.tool_calls[0].function.arguments}"
-            )
-            raise e
+    
+    output = choice.message
+    # if functions is None:
+    #     output = choice.message.content
+    # else:
+    #     if len(choice.message.tool_calls) == 0:
+    #         output = choice.message.content
+    #     else:
+    #         if not isinstance(functions, List):
+    #             assert (
+    #                 choice.message.tool_calls[0].function.name == functions.__name__
+    #             ), "Function name mismatch"
+    #         try:
+    #             import pdb;pdb.set_trace()
+    #             output = json.loads(choice.message.tool_calls[0].function.arguments)
+    #         except json.JSONDecodeError as e:
+    #             logger.error(
+    #                 f"Error decoding the function arguments: {choice.message.tool_calls[0].function.arguments}"
+    #             )
+    #             raise e
 
     in_tokens = completion.usage.prompt_tokens
     out_tokens = completion.usage.completion_tokens
@@ -98,15 +110,21 @@ def query(
 
 class OpenAIFunctionSpec(FunctionSpec):
 
-    def __init__(self, tool: Union[Dict[str, Any], Type]):
-        super().__init__(tool)
+    def __init__(self, tools: Union[List, Dict[str, Any], Type]):
+        super().__init__(tools)
 
     @property
     def tool_dict(self):
-        return convert_to_openai_tool(self.tool)
+        if isinstance(self.tools, List):
+            return [convert_to_openai_tool(tool) for tool in self.tools]
+        
+        return [convert_to_openai_tool(self.tools)]
 
     @property
     def tool_choice_dict(self):
+        if isinstance(self.tools, List):
+            return "auto"
+        
         return {
             "type": "function",
             "function": {"name": self.tool.__name__},

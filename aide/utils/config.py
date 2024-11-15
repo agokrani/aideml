@@ -37,7 +37,6 @@ class SearchConfig:
     debug_prob: float
     num_drafts: int
 
-
 @dataclass
 class AgentConfig:
     steps: int
@@ -50,7 +49,8 @@ class AgentConfig:
 
     code: StageConfig
     feedback: StageConfig
-
+    advisor: StageConfig
+    
     search: SearchConfig
 
 

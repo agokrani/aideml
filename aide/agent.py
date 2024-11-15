@@ -30,6 +30,24 @@ class SubmitReview(BaseModel):
     metric: float = Field(description="If the code ran successfully, report the value of the validation metric. Otherwise, leave it null.")
     lower_is_better: bool = Field(description="true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy).")
 
+class SearchArxiv(BaseModel):
+    """
+        Search for papers on arXiv and return the top results based on keywords
+        (task, model, dataset, etc.) Use this function when there is a need to search
+        for research papers.
+    """
+    query: str = Field(description="The search query to perform")
+    max_results: int = Field(description="The maximum number of results to return")
+
+class SearchPapersWithCode(BaseModel):
+    """
+        Search for papers on Papers with Code and return the top results based on keywords
+        (task, model, dataset, etc.) Use this function when there is a need to search
+        for research papers and the source code.
+    """
+    query: str = Field(description="The search query to perform")
+    max_results: int = Field(description="The maximum number of results to return")
+
 class Agent:
     def __init__(
         self,
@@ -151,7 +169,7 @@ class Agent:
         completion_text = None
         for _ in range(retries):
             completion_text = query(
-                system_message=prompt,
+                system_messages=prompt,
                 user_message=None,
                 model=self.acfg.code.model,
                 temperature=self.acfg.code.temp,
@@ -168,8 +186,36 @@ class Agent:
             logger.info("Plan + code extraction failed, retrying...")
         logger.info("Final plan + code extraction attempt failed, giving up...")
         return "", completion_text  # type: ignore
+    
+    def _advisor(self, retries=3):
+        introduction = (
+            "You are an Machine learning expert tasked with advising on the best ML task/model/algorith to use."
+            "\n\n Your capabilities include: \n\n"
+            "- Based on the task description give siggestions on how to maximize the performance of the task metrics. \n"
+            "- Use the function `search_arxiv` or `search_paperswithcode` to search the state-of-the-art machine learning tasks/models/algorithms "
+            "that can be used to solve the task and stay up-to-date with the latest.\n"
+            "- You should apply some tricks to improve the performance of the model, detail the implementation steps of each trick."
+            "- First always look up for latest research via the given functions and then formulate your final plan and tricks to improve the model."
+        )
+        
+        prompt: Any = {
+            "Introduction": introduction,
+            "Task description": self.task_desc,
+        }
+        user_messages = []
+        response = query(
+            system_message=prompt,
+            user_messages=user_messages,
+            functions=[SearchArxiv, SearchPapersWithCode],
+            model=self.acfg.advisor.model,
+            temperature=self.acfg.feedback.temp,
+            convert_system_to_user=self.acfg.convert_system_to_user,
+        )
+        import pdb;pdb.set_trace()
 
+    
     def _draft(self) -> Node:
+        self._advisor()
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
             "In order to win this competition, you need to come up with an excellent and creative plan "
@@ -201,10 +247,11 @@ class Agent:
         }
         prompt["Instructions"] |= self._prompt_impl_guideline
         prompt["Instructions"] |= self._prompt_environment
-
+        
         if self.acfg.data_preview:
             prompt["Data Overview"] = self.data_preview
         plan, code = self.plan_and_code_query(prompt)
+        
         new_node = Node(plan=plan, code=code)
         logger.info(f"Drafted new node {new_node.id}")
         return new_node
@@ -250,7 +297,7 @@ class Agent:
         new_node = Node(plan=plan, code=code, parent=parent_node)
         logger.info(f"Improved node {parent_node.id} to create new node {new_node.id}")
         return new_node
-
+         
     def _debug(self, parent_node: Node) -> Node:
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
@@ -381,7 +428,7 @@ class Agent:
             dict,
             query(
                 system_message=prompt,
-                user_message=None,
+                user_messages=None,
                 function=SubmitReview,
                 model=self.acfg.feedback.model,
                 temperature=self.acfg.feedback.temp,

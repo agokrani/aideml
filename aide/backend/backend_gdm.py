@@ -5,12 +5,13 @@ import logging
 import os
 
 import google.api_core.exceptions
+from typing import List
 import google.generativeai as genai
 from google.generativeai.generative_models import generation_types
 
 from funcy import once
 from pydantic import BaseModel
-from .utils import FunctionSpec, OutputType, backoff_create
+from .utils import OutputType, backoff_create
 
 logger = logging.getLogger("aide")
 
@@ -55,8 +56,8 @@ def _setup_gdm_client(model_name: str, temperature: float):
 
 def query(
     system_message: str | None,
-    user_message: str | None,
-    function: BaseModel | None = None,
+    user_messages: List | None,
+    functions: BaseModel | List | None = None,
     convert_system_to_user: bool = False,
     **model_kwargs,
 ) -> tuple[OutputType, float, int, int, dict]:
@@ -65,18 +66,19 @@ def query(
 
     _setup_gdm_client(model, temperature)
 
-    if function is not None:
+    if functions is not None:
         raise NotImplementedError(
             "GDM supports function calling but we won't use it for now."
         )
 
     # GDM gemini api doesnt support system messages outside of the beta
-    messages = [
-        {"role": "user", "parts": message}
-        for message in [system_message, user_message]
-        if message
-    ]
-
+    messages = []
+    if system_message:
+        messages.append({"role": "user", "parts": system_message})
+    for message in user_messages:
+        if message:
+            messages.append({"role": "user", "parts": message})
+    
     t0 = time.time()
     response: generation_types.GenerateContentResponse = backoff_create(
         gdm_model.generate_content,
@@ -87,10 +89,12 @@ def query(
     )
     req_time = time.time() - t0
 
-    if response.prompt_feedback.block_reason:
-        output = str(response.prompt_feedback)
-    else:
-        output = response.text
+    output = response
+    # if response.prompt_feedback.block_reason:
+    #     output = str(response.prompt_feedback)
+    # else:
+    #     output = response.text
+    
     in_tokens = response.usage_metadata.prompt_token_count
     out_tokens = response.usage_metadata.candidates_token_count
     info = {}  # this isnt used anywhere, but is an expected return value
