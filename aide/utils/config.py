@@ -123,7 +123,7 @@ def prep_cfg(cfg: Config):
         )
 
     if cfg.data_dir.startswith("example_tasks/"):
-        cfg.data_dir = Path(__file__).parent.parent / cfg.data_dir
+        cfg.data_dir = Path(__file__).parent.parent.parent / cfg.data_dir
     cfg.data_dir = Path(cfg.data_dir).resolve()
 
     if cfg.desc_file is not None:
