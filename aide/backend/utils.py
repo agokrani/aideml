@@ -61,11 +61,13 @@ def opt_messages_to_list(
             messages.append({"role": "user", "content": system_message})
         else:
             messages.append({"role": "system", "content": system_message})
-    if user_messages:
-        for user_message in user_messages:
-            messages.append({"role": "user", "content": user_message})
+    if user_messages is None:
+        user_messages = []
+    else:
+        user_messages = [{"role": "user", "content": message} if isinstance(message, str) else message for message in user_messages]
+    messages.extend(user_messages)
+    
     return messages
-
 
 def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
     if isinstance(prompt, str):
@@ -96,31 +98,3 @@ class FunctionSpec(DataClassJsonMixin):
     def tool_choice_dict(self):
         pass 
 
-# @dataclass
-# class FunctionSpec(DataClassJsonMixin):
-#     name: str
-#     json_schema: dict  # JSON schema
-#     description: str
-
-#     def __post_init__(self):
-#         # validate the schema
-#         jsonschema.Draft7Validator.check_schema(self.json_schema)
-
-#     @property
-#     def as_openai_tool_dict(self):
-#         return {
-#             "type": "function",
-#             "function": {
-#                 "name": self.name,
-#                 "description": self.description,
-#                 "parameters": self.json_schema,
-#             },
-#             "strict": True,
-#         }
-
-#     @property
-#     def openai_tool_choice_dict(self):
-#         return {
-#             "type": "function",
-#             "function": {"name": self.name},
-#         }

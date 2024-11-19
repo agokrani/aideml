@@ -23,7 +23,7 @@ def journal2report(journal: Journal, task_desc: dict, rcfg: StageConfig):
     )
     return query(
         system_message=system_prompt_dict,
-        user_message=context_prompt,
+        user_messages=[context_prompt],
         model=rcfg.model,
         temperature=rcfg.temp,
         max_tokens=4096,

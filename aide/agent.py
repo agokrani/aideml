@@ -5,7 +5,9 @@ import time
 from typing import Any, Callable, cast
 from pydantic import BaseModel, Field
 import humanize
-from .backend import FunctionSpec, compile_prompt_to_md, query
+
+from aide.function import SearchArxiv, SearchPapersWithCode
+from .backend import query
 from .interpreter import ExecutionResult
 from .journal import Journal, Node
 from .utils import data_preview
@@ -30,23 +32,7 @@ class SubmitReview(BaseModel):
     metric: float = Field(description="If the code ran successfully, report the value of the validation metric. Otherwise, leave it null.")
     lower_is_better: bool = Field(description="true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy).")
 
-class SearchArxiv(BaseModel):
-    """
-        Search for papers on arXiv and return the top results based on keywords
-        (task, model, dataset, etc.) Use this function when there is a need to search
-        for research papers.
-    """
-    query: str = Field(description="The search query to perform")
-    max_results: int = Field(description="The maximum number of results to return")
 
-class SearchPapersWithCode(BaseModel):
-    """
-        Search for papers on Papers with Code and return the top results based on keywords
-        (task, model, dataset, etc.) Use this function when there is a need to search
-        for research papers and the source code.
-    """
-    query: str = Field(description="The search query to perform")
-    max_results: int = Field(description="The maximum number of results to return")
 
 class Agent:
     def __init__(
@@ -63,6 +49,7 @@ class Agent:
         self.data_preview: str | None = None
         self.start_time = time.time()
         self.current_step = 0
+        self._initial_research = self._perform_initial_research()
 
     def search_policy(self) -> Node | None:
         """Select a node to work on (or None to draft a new node)."""
@@ -169,8 +156,8 @@ class Agent:
         completion_text = None
         for _ in range(retries):
             completion_text = query(
-                system_messages=prompt,
-                user_message=None,
+                system_message=prompt,
+                user_messages=None,
                 model=self.acfg.code.model,
                 temperature=self.acfg.code.temp,
                 convert_system_to_user=self.acfg.convert_system_to_user,
@@ -187,35 +174,89 @@ class Agent:
         logger.info("Final plan + code extraction attempt failed, giving up...")
         return "", completion_text  # type: ignore
     
-    def _advisor(self, retries=3):
+    def _perform_initial_research(self):
         introduction = (
-            "You are an Machine learning expert tasked with advising on the best ML task/model/algorith to use."
-            "\n\n Your capabilities include: \n\n"
-            "- Based on the task description give siggestions on how to maximize the performance of the task metrics. \n"
-            "- Use the function `search_arxiv` or `search_paperswithcode` to search the state-of-the-art machine learning tasks/models/algorithms "
-            "that can be used to solve the task and stay up-to-date with the latest.\n"
-            "- You should apply some tricks to improve the performance of the model, detail the implementation steps of each trick."
-            "- First always look up for latest research via the given functions and then formulate your final plan and tricks to improve the model."
+            "You are an Machine learning expert tasked with advising on the best ML task/model/algorithm to use.\n"
+            "Your capabilities include: \n\n"
+            "- Read and understand the dataset information and user's task description, this description may include the task, " 
+            "the model (or method), and the evaluation metrics, etc. You should always follow the user's task description."
+            "- You should always use the function `search_arxiv` or `search_papers_with_code` to search the "
+            "state-of-the-art machine learning tasks/models/algorithms that can be used to solve the user's requirements, "
+            "and stay up-to-date with the latest."
+            "- If the user does not provide the details (task/model/algorithm/dataset/metric), you should always suggest."
+            "- You should provide the paper reference links of the task/model/algorithm/metric you suggest. You use the "
+            "search results from the function `search_arxiv` or `search_papers_with_code` by generated search keywords."
+            "- The suggestion should be as detailed as possible, include the SOTA methods for data processing, feature "
+            "extraction, model selection, training/sering methods and evaluation metrics. And the reasons why you suggest."
+            "- You should help user to decide which framework/tools to use for the project, such as PyTorch, TensorFlow, "
+            " MLFlow, W&B, etc."
         )
-        
+
         prompt: Any = {
             "Introduction": introduction,
             "Task description": self.task_desc,
         }
-        user_messages = []
-        response = query(
+            
+        return query(
             system_message=prompt,
-            user_messages=user_messages,
+            user_messages=None,
             functions=[SearchArxiv, SearchPapersWithCode],
             model=self.acfg.advisor.model,
-            temperature=self.acfg.feedback.temp,
+            temperature=self.acfg.advisor.temp,
             convert_system_to_user=self.acfg.convert_system_to_user,
         )
-        import pdb;pdb.set_trace()
+        
+    def _advisor(self, retries=3):
+        introduction = (
+            "You are an expert machine learning engineer attempting a task. "
+            "In order to complete this task, you need to come up with an excellent and creative plan "
+            "for a solution. The intial research has been done for you and you are supposed to provide the "
+            "next experiment you would like to run. We will now provide a description of the task and the initial research."
+        )
+        prompt: Any = {
+            "Introduction": introduction,
+            "Task description": self.task_desc,
+            "Initial Research": self._initial_research,
+            "Memory": self.journal.generate_summary(),
+            "Instructions": {},
+        }
+        prompt["Instructions"] |= {
+            "Solution sketch guideline": [
+                "This first solution design should be from the results of the initial research. ",
+                "Initial expriments should be relatively simple, and keep growing complexity in the following steps.",
+                "Take the Memory section into consideration when proposing the design,"
+                " don't propose the same modelling solution but keep the evaluation the same.",
+                "The solution sketch should be 3-5 sentences giving clear idea to the researcher on how to proceed. ",
+                "Solution sketch should be concise and clear that any one from the team can understand and implement.",
+                "Propose an evaluation metric that is reasonable for this task.",
+                "Don't suggest to do EDA.",
+                "The data is already prepared and available in the `./input` directory. There is no need to unzip any files.",
+                "You should also provide the list of relevant packages you will use for these experiments."
+            ],
+            "Response format": (
+                "Your response should be a brief outline/sketch of your proposed solution in natural language (3-5 sentences), "
+                "clear and concise sketch that any one from the team can understand and implement. "
+                "Don't give generic advice, be spefic about the exact experiment you would like to run. "
+                "It Should contain a list of relevant packages you will use for these experiments. "
+            )
+        }
+        if self.acfg.data_preview:
+            prompt["Data Overview"] = self.data_preview
+
+        advice = query(
+                system_message=prompt,
+                user_messages=None,
+                functions=None,
+                model=self.acfg.advisor.model,
+                temperature=self.acfg.advisor.temp,
+                convert_system_to_user=self.acfg.convert_system_to_user,
+        )
+        
+        return advice
 
     
     def _draft(self) -> Node:
-        self._advisor()
+        advice =self._advisor()
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
             "In order to win this competition, you need to come up with an excellent and creative plan "
@@ -230,6 +271,7 @@ class Agent:
         prompt: Any = {
             "Introduction": introduction,
             "Task description": self.task_desc,
+            "Suggested Experiment by Advisor": advice,
             "Memory": self.journal.generate_summary(),
             "Instructions": {},
         }
@@ -429,7 +471,7 @@ class Agent:
             query(
                 system_message=prompt,
                 user_messages=None,
-                function=SubmitReview,
+                functions=SubmitReview,
                 model=self.acfg.feedback.model,
                 temperature=self.acfg.feedback.temp,
                 convert_system_to_user=self.acfg.convert_system_to_user,

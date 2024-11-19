@@ -1,6 +1,8 @@
 import logging
 from typing import List
 from pydantic import BaseModel
+
+from aide.function import get_function
 from . import backend_anthropic, backend_openai, backend_openrouter, backend_gdm
 from .utils import FunctionSpec, OutputType, PromptType, compile_prompt_to_md
 
@@ -25,6 +27,7 @@ provider_to_query_func = {
     "gdm": backend_gdm.query,
     "openrouter": backend_openrouter.query,
 }
+
 
 
 def query(
@@ -63,9 +66,9 @@ def query(
     system_message = compile_prompt_to_md(system_message) if system_message else None
     if system_message:
         logger.info(f"system: {system_message}", extra={"verbose": True})
-    compiled_user_messages = [compile_prompt_to_md(msg) for msg in user_messages] if user_messages else []
-    if compiled_user_messages:
-        for idx, msg in enumerate(compiled_user_messages):
+    # Directly use user_messages as is, without compilation
+    if user_messages:
+        for idx, msg in enumerate(user_messages):
             logger.info(f"user message {idx}: {msg}", extra={"verbose": True})
     if functions is not None:
         if isinstance(functions, list):
@@ -83,7 +86,9 @@ def query(
         convert_system_to_user=convert_system_to_user,
         **model_kwargs,
     )
+
     logger.info(f"response: {output}", extra={"verbose": True})
     logger.info(f"---Query complete---", extra={"verbose": True})
+    logger.info(f"in_tokens: {in_tok_count}, out_tokens: {out_tok_count}")
 
     return output
