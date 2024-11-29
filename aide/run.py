@@ -26,7 +26,6 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from rich.text import Text
-from rich.markdown import Markdown
 from rich.status import Status
 from rich.tree import Tree
 from .utils.config import load_task_desc, prep_agent_workspace, save_run, load_cfg
@@ -39,6 +38,7 @@ class VerboseFilter(logging.Filter):
 
     def filter(self, record):
         return not (hasattr(record, "verbose") and record.verbose)
+
 
 
 def journal_to_rich_tree(journal: Journal):
@@ -235,10 +235,10 @@ def run():
         print("Generating final report from journal...")
         report = journal2report(journal, task_desc, cfg.report)
         print(report)
-        report_file_path = cfg.log_dir / 'report.md'
+        report_file_path = cfg.log_dir / "report.md"
         with open(report_file_path, "w") as f:
             f.write(report)
-        print('Report written to file:', report_file_path)
+        print("Report written to file:", report_file_path)
 
 
 if __name__ == "__main__":

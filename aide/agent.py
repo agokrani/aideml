@@ -5,7 +5,7 @@ import time
 from typing import Any, Callable, cast
 from pydantic import BaseModel, Field
 import humanize
-from .backend import FunctionSpec, compile_prompt_to_md, query
+from .backend import FunctionSpec, query
 from .interpreter import ExecutionResult
 from .journal import Journal, Node
 from .utils import data_preview
