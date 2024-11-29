@@ -14,6 +14,7 @@ from typing import (
     List
 )
 
+from aide.actions import get_action
 from aide.backend.utils import (
     FunctionSpec,
     OutputType,
@@ -45,18 +46,28 @@ def _setup_openai_client():
     global _client
     _client = openai.OpenAI(max_retries=0)
 
-def parse_response(message):
-    content = message.content if message.content != '' else None
-    functions = []
-    if len(message.tool_calls) > 0:
-        for tool_call in message.tool_calls:
-            functions.append(
-                {
-                    "name": tool_call.function.name,
-                    "arguments": json.loads(tool_call.function.arguments)
+
+def get_tool_message(tool_call_id: str, name:str, argments:dict) -> dict: 
+    return {
+        "role": "assistant",
+        "tool_calls": [
+            {
+                "id": tool_call_id,
+                "type": "function",
+                "function": {
+                    "arguments": json.dumps(argments),
+                    "name": name
                 }
-            )
-        return content, functions
+            }
+        ]
+    }
+
+def get_tool_response_message(tool_call_id: str, content: str|dict) -> dict:
+    return {
+        "role": "tool",
+        "tool_call_id": tool_call_id,
+        "content": content if isinstance(content, str) else json.dumps(content)
+    }
 
 def query(
     system_message: str | None,
@@ -92,11 +103,12 @@ def query(
     in_tokens = completion.usage.prompt_tokens
     out_tokens = completion.usage.completion_tokens
     logger.info(f"in_tokens: {in_tokens}, out_tokens: {out_tokens}")
-
+    
     info = {
         "system_fingerprint": completion.system_fingerprint,
         "model": completion.model,
         "created": completion.created,
+        "stop_reason": choice.finish_reason,
     }
     if functions is None or choice.message.tool_calls is None:
         output = choice.message.content
@@ -110,12 +122,21 @@ def query(
             for tool_call in choice.message.tool_calls:
                 func = get_function(tool_call.function.name)
                 if func is None:
+                    action_cls = get_action(tool_call.function.name)
+                    if action_cls: 
+                        action = action_cls(**json.loads(tool_call.function.arguments))
+                        action.tool_call_metadata = {
+                            "provider": "openai", 
+                            "tool_call_id": tool_call.id,
+                        }
+                        return action, req_time, in_tokens, out_tokens, info
                     logger.warning(f"Function {tool_call.function.name} not found, returning arguments.")
                     return json.loads(tool_call.function.arguments), req_time, in_tokens, out_tokens, info
                 else:
                     tool_result = func(**json.loads(tool_call.function.arguments))
-                    tool_results.append({"role": "tool", "content": tool_result, "tool_call_id": tool_call.id})
-                    
+                    #tool_results.append({"role": "tool", "content": tool_result, "tool_call_id": tool_call.id})
+                    tool_results.append(get_tool_response_message(tool_call.id, tool_result))
+            
             user_messages = user_messages.append(choice.message) if isinstance(user_messages, list) else [choice.message]
             user_messages.extend(tool_results)
                         
@@ -155,5 +176,5 @@ class OpenAIFunctionSpec(FunctionSpec):
         
         return {
             "type": "function",
-            "function": {"name": self.tool.__name__},
+            "function": {"name": self.tools.__name__},
         }

@@ -1,4 +1,5 @@
 
+import asyncio
 import sys
 import atexit
 import logging
@@ -94,7 +95,7 @@ def journal_to_string_tree(journal: Journal) -> str:
     return tree_str
 
 
-def run():
+async def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-path", type=str, help="Path to the configuration file")
     args, _ = parser.parse_known_args()
@@ -209,7 +210,7 @@ def run():
         )
     if cfg.debug: 
         while global_step < cfg.agent.steps:
-            agent.step(exec_callback=exec_callback)
+            await agent.step(exec_callback=exec_callback)
             # on the last step, print the tree
             if global_step == cfg.agent.steps - 1:
                 logger.info(journal_to_string_tree(journal))
@@ -222,7 +223,7 @@ def run():
            screen=True,
         ) as live:
             while global_step < cfg.agent.steps:
-                agent.step(exec_callback=exec_callback)
+                await agent.step(exec_callback=exec_callback)
                 # on the last step, print the tree
                 if global_step == cfg.agent.steps - 1:
                     logger.info(journal_to_string_tree(journal))
@@ -242,4 +243,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    asyncio.run(run())

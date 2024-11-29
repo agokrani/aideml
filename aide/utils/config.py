@@ -30,6 +30,10 @@ class StageConfig:
     model: str
     temp: float
 
+@dataclass
+class InitialSolutionConfig:
+    exp_name: str | None
+    node_id: str | None
 
 @dataclass
 class SearchConfig:
@@ -47,6 +51,7 @@ class AgentConfig:
     convert_system_to_user: bool
     obfuscate: bool
 
+    copilot: StageConfig
     code: StageConfig
     feedback: StageConfig
     advisor: StageConfig
@@ -78,6 +83,8 @@ class Config(Hashable):
 
     exp_name: str
 
+    initial_solution: InitialSolutionConfig
+    
     exec: ExecConfig
     generate_report: bool
     report: StageConfig
@@ -97,7 +104,7 @@ def _get_next_logindex(dir: Path) -> int:
 
 
 def _load_cfg(
-    path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml", use_cli_args=True
+    path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml", use_cli_args=False
 ) -> Config:
     cfg = OmegaConf.load(path)
     if use_cli_args:
@@ -105,9 +112,9 @@ def _load_cfg(
     return cfg
 
 
-def load_cfg(path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml") -> Config:
+def load_cfg(path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml", use_cli_args=False) -> Config:
     """Load config from .yaml file and CLI args, and set up logging directory."""
-    return prep_cfg(_load_cfg(path))
+    return prep_cfg(_load_cfg(path, use_cli_args=use_cli_args))
 
 
 def prep_cfg(cfg: Config):

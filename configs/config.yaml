@@ -18,6 +18,11 @@ copy_data: True
 
 exp_name: null # a random experiment name will be generated if not provided
 
+# settings for loading the previous best solution or a starting point
+initial_solution:
+  exp_name: null
+  node_id: null
+
 # settings for code execution
 exec:
   timeout: 3600

@@ -29,6 +29,15 @@ provider_to_query_func = {
 }
 
 
+provider_to_tool_message_func = {
+    "openai": backend_openai.get_tool_message,
+    "anthropic": backend_anthropic.get_tool_message,
+}
+
+provider_to_tool_response_message_func = {
+    "openai": backend_openai.get_tool_response_message,
+    "anthropic": backend_anthropic.get_tool_response_message,
+}
 
 def query(
     system_message: PromptType | None,
@@ -51,7 +60,7 @@ def query(
         temperature (float | None, optional): Temperature to sample at. Defaults to the model-specific default.
         max_tokens (int | None, optional): Maximum number of tokens to generate. Defaults to the model-specific max tokens.
         function (BaseModel | None, optional): Optional BaseModel object defining a function call. If given, the return value will be a dict.
-
+        return_function (bool): If True then return the function call when function is not found. Else return arguments of the function
     Returns:
         OutputType: A string completion if function is None, otherwise a dict with the function call details.
     """

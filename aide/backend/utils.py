@@ -73,6 +73,7 @@ def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
     if isinstance(prompt, str):
         return prompt.strip() + "\n"
     elif isinstance(prompt, list):
+        import pdb; pdb.set_trace()
         return "\n".join([f"- {s.strip()}" for s in prompt] + ["\n"])
 
     out = []

@@ -100,7 +100,18 @@ class Node(DataClassJsonMixin):
         if self.stage_name != "debug":
             return 0
         return self.parent.debug_depth + 1  # type: ignore
-
+    
+    def generate_summary(self, include_code=False) -> str:
+        """Generate a summary of the node for the agent."""
+        summary = f"Design: {self.plan}\n\n"
+        if include_code:
+            summary += f"Code: {self.code}\n\n"
+        summary += f"Results: {self.analysis}\n\n"
+        
+        if self.metric.value is not None:
+            summary += f"Validation Metric: {self.metric.value}\n\n"
+        
+        return summary
 
 @dataclass
 class InteractiveSession(DataClassJsonMixin):
@@ -131,7 +142,7 @@ class InteractiveSession(DataClassJsonMixin):
 
         return "\n".join(trace).strip()
 
-
+    
 @dataclass
 class Journal(DataClassJsonMixin):
     """A collection of nodes representing the solution tree."""
@@ -170,6 +181,13 @@ class Journal(DataClassJsonMixin):
         """Return a list of all metric values in the journal."""
         return [n.metric for n in self.nodes]
 
+    def get(self, node_id: str) -> Node:
+        """Return the node with the given ID."""
+        for n in self.nodes:
+            if n.id == node_id:
+                return n
+        raise ValueError(f"Node with ID {node_id} not found in journal.")
+
     def get_best_node(self, only_good=True) -> None | Node:
         """Return the best solution found so far (node with the highest validation metric)."""
         if only_good:
@@ -184,11 +202,12 @@ class Journal(DataClassJsonMixin):
         """Generate a summary of the journal for the agent."""
         summary = []
         for n in self.good_nodes:
-            summary_part = f"Design: {n.plan}\n"
-            if include_code:
-                summary_part += f"Code: {n.code}\n"
-            summary_part += f"Results: {n.analysis}\n"
-            summary_part += f"Validation Metric: {n.metric.value}\n"
+            # summary_part = f"Design: {n.plan}\n"
+            # if include_code:
+            #     summary_part += f"Code: {n.code}\n"
+            # summary_part += f"Results: {n.analysis}\n"
+            # summary_part += f"Validation Metric: {n.metric.value}\n"
+            summary_part = n.generate_summary(include_code)
             summary.append(summary_part)
         return "\n-------------------------------\n".join(summary)
 

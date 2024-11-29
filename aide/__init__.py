@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-
+from .version import __version__
 from .backend import compile_prompt_to_md
 
 from .agent import Agent

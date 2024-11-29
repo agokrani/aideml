@@ -2,11 +2,12 @@ import shutil
 import logging
 import random
 import time
-from typing import Any, Callable, cast
+from typing import Any, Callable, List, cast
 from pydantic import BaseModel, Field
 import humanize
 
 from aide.function import SearchArxiv, SearchPapersWithCode
+from aide.actions import Debug, Draft, Improve, Finish, SubmitReview
 from .backend import query
 from .interpreter import ExecutionResult
 from .journal import Journal, Node
@@ -24,15 +25,48 @@ def format_time(time_in_sec: int):
 
 ExecCallbackType = Callable[[str, bool], ExecutionResult]
 
-class SubmitReview(BaseModel):
-    """Submit a review evaluating the output of the training script."""
-    is_bug: bool = Field(description="true if the output log shows that the execution failed or has some bug, otherwise false.")
-    has_csv_submission: bool = Field(description="true if the code saves the predictions on the test data")
-    summary: str = Field(description="write a short summary (2-3 sentences) describing the empirical findings. Alternatively mention if there is a bug or the submission.csv was not properly produced. DO NOT suggest fixes or improvements.")
-    metric: float = Field(description="If the code ran successfully, report the value of the validation metric. Otherwise, leave it null.")
-    lower_is_better: bool = Field(description="true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy).")
 
 
+class ActionAgent:
+    def __init__(self, task_desc: str, cfg: Config):
+        self.task_desc = task_desc
+        self.cfg = cfg
+        self.acfg = self.cfg.agent
+        self.message_history = []
+
+    async def predict_next_action(self, user_messages):
+        introduction = (
+            "You are helpful copilot assisting a machine learning engineer. Your task is to look at the task description "
+            "along with the chat history or summary of the previous messages and suggest the next action to take. "
+            "The action should be only one of the following: draft, improve, debug, finish"
+            "In case the user has not provided enough information, please choose the action that you think is most appropriate "
+            "based on the task description and the chat history."
+        )
+        prompt: Any = {
+            "Introduction": introduction,
+            "Task description": self.task_desc,
+            # "Chat history": self.message_history[:-10],
+            # "Recent chat messages": self.message_history[-10:],
+        }
+
+        recent_messages = self.message_history[-10:]
+        self.message_history.extend(user_messages)
+
+        user_messages[:0] = recent_messages
+
+        response = query(
+            system_message=prompt,
+            user_messages=user_messages,
+            model=self.acfg.copilot.model,
+            temperature=self.acfg.copilot.temp,
+            functions=[Debug, Draft, Improve, Finish],
+            convert_system_to_user=self.acfg.convert_system_to_user,
+        )
+
+        self.message_history.append(response.get_tool_message())
+
+        return response 
+        
 
 class Agent:
     def __init__(
@@ -49,7 +83,7 @@ class Agent:
         self.data_preview: str | None = None
         self.start_time = time.time()
         self.current_step = 0
-        self._initial_research = self._perform_initial_research()
+        self._initial_research = None 
 
     def search_policy(self) -> Node | None:
         """Select a node to work on (or None to draft a new node)."""
@@ -151,13 +185,13 @@ class Agent:
             )
         }
 
-    def plan_and_code_query(self, prompt, retries=3) -> tuple[str, str]:
+    def plan_and_code_query(self, prompt, user_messages=None, retries=3) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         completion_text = None
         for _ in range(retries):
             completion_text = query(
                 system_message=prompt,
-                user_messages=None,
+                user_messages=user_messages,
                 model=self.acfg.code.model,
                 temperature=self.acfg.code.temp,
                 convert_system_to_user=self.acfg.convert_system_to_user,
@@ -213,6 +247,10 @@ class Agent:
             "for a solution. The intial research has been done for you and you are supposed to provide the "
             "next experiment you would like to run. We will now provide a description of the task and the initial research."
         )
+
+        if self._initial_research is None or self._initial_research == "":
+            self._initial_research = self._perform_initial_research()
+
         prompt: Any = {
             "Introduction": introduction,
             "Task description": self.task_desc,
@@ -255,8 +293,8 @@ class Agent:
         return advice
 
     
-    def _draft(self) -> Node:
-        advice =self._advisor()
+    def _draft(self, user_messages: List|None) -> Node:
+        advice = self._advisor()
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
             "In order to win this competition, you need to come up with an excellent and creative plan "
@@ -292,13 +330,13 @@ class Agent:
         
         if self.acfg.data_preview:
             prompt["Data Overview"] = self.data_preview
-        plan, code = self.plan_and_code_query(prompt)
+        plan, code = self.plan_and_code_query(prompt, user_messages)
         
         new_node = Node(plan=plan, code=code)
         logger.info(f"Drafted new node {new_node.id}")
         return new_node
 
-    def _improve(self, parent_node: Node) -> Node:
+    def _improve(self, parent_node: Node, user_messages: List|None) -> Node:
         introduction = (
             "You are a Kaggle grandmaster attending a competition. You are provided with a previously developed "
             "solution below and should improve it in order to further increase the (test time) performance. "
@@ -335,12 +373,12 @@ class Agent:
         }
         prompt["Instructions"] |= self._prompt_impl_guideline
 
-        plan, code = self.plan_and_code_query(prompt)
+        plan, code = self.plan_and_code_query(prompt, user_messages)
         new_node = Node(plan=plan, code=code, parent=parent_node)
         logger.info(f"Improved node {parent_node.id} to create new node {new_node.id}")
         return new_node
          
-    def _debug(self, parent_node: Node) -> Node:
+    def _debug(self, parent_node: Node, user_messages=List|None) -> Node:
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
             "Your previous solution had a bug and/or did not produce a submission.csv, "
@@ -375,7 +413,7 @@ class Agent:
         if self.acfg.data_preview:
             prompt["Data Overview"] = self.data_preview
 
-        plan, code = self.plan_and_code_query(prompt)
+        plan, code = self.plan_and_code_query(prompt, user_messages)
         new_node = Node(plan=plan, code=code, parent=parent_node)
         logger.info(f"Debugged node {parent_node.id} to create new node {new_node.id}")
         return new_node
@@ -385,7 +423,9 @@ class Agent:
     ):
         self.data_preview = data_preview.generate(self.cfg.workspace_dir)
 
-    def step(self, exec_callback: ExecCallbackType):
+
+    # For backward compatibility, need to change once the pipeline is verified
+    async def step(self, exec_callback: ExecCallbackType = None, callback_manager = None):
         # clear the submission dir from previous steps
         shutil.rmtree(self.cfg.workspace_dir / "submission", ignore_errors=True)
         (self.cfg.workspace_dir / "submission").mkdir(exist_ok=True)
@@ -402,10 +442,14 @@ class Agent:
             result_node = self._debug(parent_node)
         else:
             result_node = self._improve(parent_node)
+        if exec_callback:
+            exec_result = exec_callback(result_node.code, True)
+        else: 
+            exec_result = await callback_manager.execute('exec', result_node.code, True)
 
         result_node = self.parse_exec_result(
             node=result_node,
-            exec_result=exec_callback(result_node.code, True),
+            exec_result=exec_result,
         )
         # handle final cases where we missed buggy nodes somehow
         if not result_node.is_buggy:
@@ -466,33 +510,33 @@ class Agent:
             "Execution output": wrap_code(node.term_out, lang=""),
         }
 
-        response = cast(
-            dict,
-            query(
-                system_message=prompt,
-                user_messages=None,
-                functions=SubmitReview,
-                model=self.acfg.feedback.model,
-                temperature=self.acfg.feedback.temp,
-                convert_system_to_user=self.acfg.convert_system_to_user,
-            ),
+        response = query(
+            system_message=prompt,
+            user_messages=None,
+            functions=SubmitReview,
+            model=self.acfg.feedback.model,
+            temperature=self.acfg.feedback.temp,
+            convert_system_to_user=self.acfg.convert_system_to_user
         )
-
+        if not isinstance(response, SubmitReview): 
+            logger.error(f"Expected SubmitReview but got {type(response)}")
+            return None
+        
         # if the metric isn't a float then fill the metric with the worst metric
-        if not isinstance(response["metric"], float):
-            response["metric"] = None
+        if not isinstance(response.metric, float):
+            response.metric= None
 
         # do an extra check, to catch cases where judge fails
         has_csv_submission = (
             self.cfg.workspace_dir / "submission" / "submission.csv"
         ).exists()
 
-        node.analysis = response["summary"]
+        node.analysis = response.summary
         node.is_buggy = (
-            response["is_bug"]
+            response.is_bug
             or node.exc_type is not None
-            or response["metric"] is None
-            or response["has_csv_submission"] == False
+            or response.metric is None
+            or response.has_csv_submission == False
             or has_csv_submission == False
         )
 
@@ -504,7 +548,7 @@ class Agent:
         else:
             logger.info(f"Parsed results: Node {node.id} is not buggy")
             node.metric = MetricValue(
-                response["metric"], maximize=not response["lower_is_better"]
+                response.metric, maximize=not response.lower_is_better
             )
 
         return node

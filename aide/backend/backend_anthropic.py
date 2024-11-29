@@ -8,6 +8,7 @@ from typing import Any, Dict, Type, Union, List
 import anthropic
 from pydantic import BaseModel
 
+from aide.actions import get_action
 from aide.function import get_function
 from .utils import FunctionSpec, OutputType, backoff_create, opt_messages_to_list
 from funcy import notnone, once, select_values
@@ -30,6 +31,30 @@ def _setup_anthropic_client():
     global _client
     _client = anthropic.Anthropic(max_retries=0)
 
+def get_tool_message(tool_call_id: str, name: str, arguments: dict) -> dict:
+    return {
+        "role": "assistant",
+        "content": [
+            {
+                "type": "tool_use", 
+                "id": tool_call_id, 
+                "name": name, 
+                "input": arguments
+            }
+        ]
+    }
+
+def get_tool_response_message(tool_call_id: str, content: str|dict) -> dict:
+    return {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": tool_call_id,
+                "content": content if isinstance(content, str) else json.dumps(content)
+            }
+        ]
+    }
 
 def query(
     system_message: str | None,
@@ -88,6 +113,14 @@ def query(
             if content.type == "tool_use":
                 func = get_function(content.name)
                 if func is None:
+                    action_cls = get_action(content.name)
+                    if action_cls: 
+                        action = action_cls(**content.input)
+                        action.tool_call_metadata = {
+                            "provider": "anthropic",
+                            "tool_call_id": content.id
+                        }
+                        return action, req_time, in_tokens, out_tokens, info
                     logger.warning(f"Function {content.name} not found, returning arguments.")
                     return content.input, req_time, in_tokens, out_tokens, info
                 else:
