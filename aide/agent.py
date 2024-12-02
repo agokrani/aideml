@@ -26,7 +26,6 @@ def format_time(time_in_sec: int):
 ExecCallbackType = Callable[[str, bool], ExecutionResult]
 
 
-
 class ActionAgent:
     def __init__(self, task_desc: str, cfg: Config):
         self.task_desc = task_desc
@@ -62,11 +61,10 @@ class ActionAgent:
             functions=[Debug, Draft, Improve, Finish],
             convert_system_to_user=self.acfg.convert_system_to_user,
         )
-
         self.message_history.append(response.get_tool_message())
 
-        return response 
-        
+        return response
+
 
 class Agent:
     def __init__(
@@ -83,7 +81,7 @@ class Agent:
         self.data_preview: str | None = None
         self.start_time = time.time()
         self.current_step = 0
-        self._initial_research = None 
+        self._initial_research = None
 
     def search_policy(self) -> Node | None:
         """Select a node to work on (or None to draft a new node)."""
@@ -185,7 +183,9 @@ class Agent:
             )
         }
 
-    def plan_and_code_query(self, prompt, user_messages=None, retries=3) -> tuple[str, str]:
+    def plan_and_code_query(
+        self, prompt, user_messages=None, retries=3
+    ) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         completion_text = None
         for _ in range(retries):
@@ -207,12 +207,12 @@ class Agent:
             logger.info("Plan + code extraction failed, retrying...")
         logger.info("Final plan + code extraction attempt failed, giving up...")
         return "", completion_text  # type: ignore
-    
+
     def _perform_initial_research(self):
         introduction = (
             "You are an Machine learning expert tasked with advising on the best ML task/model/algorithm to use.\n"
             "Your capabilities include: \n\n"
-            "- Read and understand the dataset information and user's task description, this description may include the task, " 
+            "- Read and understand the dataset information and user's task description, this description may include the task, "
             "the model (or method), and the evaluation metrics, etc. You should always follow the user's task description."
             "- You should always use the function `search_arxiv` or `search_papers_with_code` to search the "
             "state-of-the-art machine learning tasks/models/algorithms that can be used to solve the user's requirements, "
@@ -230,7 +230,7 @@ class Agent:
             "Introduction": introduction,
             "Task description": self.task_desc,
         }
-            
+
         return query(
             system_message=prompt,
             user_messages=None,
@@ -239,7 +239,14 @@ class Agent:
             temperature=self.acfg.advisor.temp,
             convert_system_to_user=self.acfg.convert_system_to_user,
         )
-        
+
+    def get_initial_research(self, redo=False):
+
+        if self._initial_research is None or self._initial_research == "" or redo:
+            self._initial_research = self._perform_initial_research()
+
+        return self._initial_research
+
     def _advisor(self, retries=3):
         introduction = (
             "You are an expert machine learning engineer attempting a task. "
@@ -269,31 +276,30 @@ class Agent:
                 "Propose an evaluation metric that is reasonable for this task.",
                 "Don't suggest to do EDA.",
                 "The data is already prepared and available in the `./input` directory. There is no need to unzip any files.",
-                "You should also provide the list of relevant packages you will use for these experiments."
+                "You should also provide the list of relevant packages you will use for these experiments.",
             ],
             "Response format": (
                 "Your response should be a brief outline/sketch of your proposed solution in natural language (3-5 sentences), "
                 "clear and concise sketch that any one from the team can understand and implement. "
                 "Don't give generic advice, be spefic about the exact experiment you would like to run. "
                 "It Should contain a list of relevant packages you will use for these experiments. "
-            )
+            ),
         }
         if self.acfg.data_preview:
             prompt["Data Overview"] = self.data_preview
 
         advice = query(
-                system_message=prompt,
-                user_messages=None,
-                functions=None,
-                model=self.acfg.advisor.model,
-                temperature=self.acfg.advisor.temp,
-                convert_system_to_user=self.acfg.convert_system_to_user,
+            system_message=prompt,
+            user_messages=None,
+            functions=None,
+            model=self.acfg.advisor.model,
+            temperature=self.acfg.advisor.temp,
+            convert_system_to_user=self.acfg.convert_system_to_user,
         )
-        
+
         return advice
 
-    
-    def _draft(self, user_messages: List|None) -> Node:
+    def _draft(self, user_messages: List | None) -> Node:
         advice = self._advisor()
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
@@ -327,16 +333,16 @@ class Agent:
         }
         prompt["Instructions"] |= self._prompt_impl_guideline
         prompt["Instructions"] |= self._prompt_environment
-        
+
         if self.acfg.data_preview:
             prompt["Data Overview"] = self.data_preview
         plan, code = self.plan_and_code_query(prompt, user_messages)
-        
+
         new_node = Node(plan=plan, code=code)
         logger.info(f"Drafted new node {new_node.id}")
         return new_node
 
-    def _improve(self, parent_node: Node, user_messages: List|None) -> Node:
+    def _improve(self, parent_node: Node, user_messages: List | None) -> Node:
         introduction = (
             "You are a Kaggle grandmaster attending a competition. You are provided with a previously developed "
             "solution below and should improve it in order to further increase the (test time) performance. "
@@ -377,8 +383,8 @@ class Agent:
         new_node = Node(plan=plan, code=code, parent=parent_node)
         logger.info(f"Improved node {parent_node.id} to create new node {new_node.id}")
         return new_node
-         
-    def _debug(self, parent_node: Node, user_messages=List|None) -> Node:
+
+    def _debug(self, parent_node: Node, user_messages=List | None) -> Node:
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
             "Your previous solution had a bug and/or did not produce a submission.csv, "
@@ -423,9 +429,8 @@ class Agent:
     ):
         self.data_preview = data_preview.generate(self.cfg.workspace_dir)
 
-
     # For backward compatibility, need to change once the pipeline is verified
-    async def step(self, exec_callback: ExecCallbackType = None, callback_manager = None):
+    async def step(self, exec_callback: ExecCallbackType = None, callback_manager=None):
         # clear the submission dir from previous steps
         shutil.rmtree(self.cfg.workspace_dir / "submission", ignore_errors=True)
         (self.cfg.workspace_dir / "submission").mkdir(exist_ok=True)
@@ -444,8 +449,8 @@ class Agent:
             result_node = self._improve(parent_node)
         if exec_callback:
             exec_result = exec_callback(result_node.code, True)
-        else: 
-            exec_result = await callback_manager.execute('exec', result_node.code, True)
+        else:
+            exec_result = await callback_manager.execute("exec", result_node.code, True)
 
         result_node = self.parse_exec_result(
             node=result_node,
@@ -516,15 +521,15 @@ class Agent:
             functions=SubmitReview,
             model=self.acfg.feedback.model,
             temperature=self.acfg.feedback.temp,
-            convert_system_to_user=self.acfg.convert_system_to_user
+            convert_system_to_user=self.acfg.convert_system_to_user,
         )
-        if not isinstance(response, SubmitReview): 
+        if not isinstance(response, SubmitReview):
             logger.error(f"Expected SubmitReview but got {type(response)}")
             return None
-        
+
         # if the metric isn't a float then fill the metric with the worst metric
         if not isinstance(response.metric, float):
-            response.metric= None
+            response.metric = None
 
         # do an extra check, to catch cases where judge fails
         has_csv_submission = (

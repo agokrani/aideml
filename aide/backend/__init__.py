@@ -39,6 +39,7 @@ provider_to_tool_response_message_func = {
     "anthropic": backend_anthropic.get_tool_response_message,
 }
 
+
 def query(
     system_message: PromptType | None,
     user_messages: List | None,
@@ -82,9 +83,15 @@ def query(
     if functions is not None:
         if isinstance(functions, list):
             for idx, function in enumerate(functions):
-                logger.info(f"function {idx} spec: {function.model_json_schema()}", extra={"verbose": True})
+                logger.info(
+                    f"function {idx} spec: {function.model_json_schema()}",
+                    extra={"verbose": True},
+                )
         else:
-            logger.info(f"function spec: {functions.model_json_schema()}", extra={"verbose": True})
+            logger.info(
+                f"function spec: {functions.model_json_schema()}",
+                extra={"verbose": True},
+            )
 
     provider = determine_provider(model)
     query_func = provider_to_query_func[provider]

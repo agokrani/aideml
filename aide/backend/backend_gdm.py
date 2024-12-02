@@ -78,7 +78,7 @@ def query(
     for message in user_messages:
         if message:
             messages.append({"role": "user", "parts": message})
-    
+
     t0 = time.time()
     response: generation_types.GenerateContentResponse = backoff_create(
         gdm_model.generate_content,
@@ -94,7 +94,7 @@ def query(
     #     output = str(response.prompt_feedback)
     # else:
     #     output = response.text
-    
+
     in_tokens = response.usage_metadata.prompt_token_count
     out_tokens = response.usage_metadata.candidates_token_count
     info = {}  # this isnt used anywhere, but is an expected return value

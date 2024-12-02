@@ -30,16 +30,19 @@ class StageConfig:
     model: str
     temp: float
 
+
 @dataclass
 class InitialSolutionConfig:
     exp_name: str | None
     node_id: str | None
+
 
 @dataclass
 class SearchConfig:
     max_debug_depth: int
     debug_prob: float
     num_drafts: int
+
 
 @dataclass
 class AgentConfig:
@@ -55,7 +58,7 @@ class AgentConfig:
     code: StageConfig
     feedback: StageConfig
     advisor: StageConfig
-    
+
     search: SearchConfig
 
 
@@ -64,6 +67,7 @@ class ExecConfig:
     timeout: int
     agent_file_name: str
     format_tb_ipython: bool
+
 
 @dataclass
 class Config(Hashable):
@@ -84,7 +88,7 @@ class Config(Hashable):
     exp_name: str
 
     initial_solution: InitialSolutionConfig
-    
+
     exec: ExecConfig
     generate_report: bool
     report: StageConfig
@@ -104,7 +108,8 @@ def _get_next_logindex(dir: Path) -> int:
 
 
 def _load_cfg(
-    path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml", use_cli_args=False
+    path: Path = Path(__file__).parent.parent.parent / "configs" / "config.yaml",
+    use_cli_args=False,
 ) -> Config:
     cfg = OmegaConf.load(path)
     if use_cli_args:
@@ -112,7 +117,10 @@ def _load_cfg(
     return cfg
 
 
-def load_cfg(path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml", use_cli_args=False) -> Config:
+def load_cfg(
+    path: Path = Path(__file__).parent.parent.parent / "configs" / "config.yaml",
+    use_cli_args=False,
+) -> Config:
     """Load config from .yaml file and CLI args, and set up logging directory."""
     return prep_cfg(_load_cfg(path, use_cli_args=use_cli_args))
 
@@ -120,7 +128,7 @@ def load_cfg(path: Path = Path(__file__).parent.parent.parent/ "configs" / "conf
 def prep_cfg(cfg: Config):
     if "--config-path" in cfg.keys():
         cfg.pop("--config-path")
-    
+
     if cfg.data_dir is None:
         raise ValueError("`data_dir` must be provided.")
 

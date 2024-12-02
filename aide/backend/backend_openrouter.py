@@ -58,7 +58,7 @@ def query(
     for message in user_messages:
         if message:
             messages.append({"role": "user", "content": message})
-    
+
     t0 = time.time()
     completion = backoff_create(
         _client.chat.completions.create,
@@ -76,7 +76,7 @@ def query(
 
     # output = completion.choices[0].message.content
     output = completion.choices[0].message
-    
+
     in_tokens = completion.usage.prompt_tokens
     out_tokens = completion.usage.completion_tokens
 

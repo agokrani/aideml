@@ -8,14 +8,23 @@ from aide.utils.config import save_run
 
 
 class AutoPilot(Workflow):
-    def __init__(self, agent: Agent, interpreter: Interpreter, cfg: Config, callback_manager: CallbackManager|None = None):
+    def __init__(
+        self,
+        agent: Agent,
+        interpreter: Interpreter,
+        cfg: Config,
+        callback_manager: CallbackManager | None = None,
+    ):
         self.agent = agent
         self.cfg = cfg
         self.interpreter = interpreter
         self.journal = agent.journal
-        self.callback_manager = callback_manager if callback_manager is not None else CallbackManager()
+        self.callback_manager = (
+            callback_manager if callback_manager is not None else CallbackManager()
+        )
 
         self.callback_manager.register_callback("exec", self.interpreter.run)
+
     def run(self):
         global_step = len(self.journal)
         while global_step < self.cfg.agent.steps:

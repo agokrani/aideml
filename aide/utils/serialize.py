@@ -1,10 +1,10 @@
 import copy
 import json
 from pathlib import Path
-from typing import Type, TypeVar
-
 import dataclasses_json
-from ..journal import Journal
+
+from ..journal import Journal, Node
+from typing import Type, TypeVar, Union
 
 
 def dumps_json(obj: dataclasses_json.DataClassJsonMixin):
@@ -49,3 +49,36 @@ def loads_json(s: str, cls: Type[G]) -> G:
 def load_json(path: Path, cls: Type[G]) -> G:
     with open(path, "r") as f:
         return loads_json(f.read(), cls)
+
+
+def load_code_file(path: Union[str, Path]) -> "Node":
+    """
+    Loads a Python file and creates a Node object from its content.
+
+    Args:
+        path (Union[str, Path]): Path to the Python file.
+
+    Returns:
+        Node: A Node object containing the file's content.
+
+    Raises:
+        FileNotFoundError: If the specified file doesn't exist.
+        ValueError: If the file is not a Python file.
+        IOError: If there are issues reading the file.
+    """
+    # Convert string path to Path object if needed
+    file_path = Path(path) if isinstance(path, str) else path
+
+    # Validate file existence and extension
+    if not file_path.exists():
+        raise FileNotFoundError(f"The file '{file_path}' does not exist")
+
+    if file_path.suffix != ".py":
+        raise ValueError(f"The file '{file_path}' must have a '.py' extension")
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            code = f.read()
+            return Node(code=code, parent=None)
+    except IOError as e:
+        raise IOError(f"Error reading file '{file_path}': {str(e)}")

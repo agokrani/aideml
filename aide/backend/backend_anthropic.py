@@ -31,30 +31,28 @@ def _setup_anthropic_client():
     global _client
     _client = anthropic.Anthropic(max_retries=0)
 
+
 def get_tool_message(tool_call_id: str, name: str, arguments: dict) -> dict:
     return {
         "role": "assistant",
         "content": [
-            {
-                "type": "tool_use", 
-                "id": tool_call_id, 
-                "name": name, 
-                "input": arguments
-            }
-        ]
+            {"type": "tool_use", "id": tool_call_id, "name": name, "input": arguments}
+        ],
     }
 
-def get_tool_response_message(tool_call_id: str, content: str|dict) -> dict:
+
+def get_tool_response_message(tool_call_id: str, content: str | dict) -> dict:
     return {
         "role": "user",
         "content": [
             {
                 "type": "tool_result",
                 "tool_use_id": tool_call_id,
-                "content": content if isinstance(content, str) else json.dumps(content)
+                "content": content if isinstance(content, str) else json.dumps(content),
             }
-        ]
+        ],
     }
+
 
 def query(
     system_message: str | None,
@@ -76,8 +74,14 @@ def query(
 
     # Anthropic doesn't allow not having a user messages
     # if we only have system msg -> use it as user msg
-    if system_message is not None and (user_messages is None or len(user_messages) == 0):
-        user_messages = user_messages.append(system_message) if isinstance(user_messages, list) else [system_message]
+    if system_message is not None and (
+        user_messages is None or len(user_messages) == 0
+    ):
+        user_messages = (
+            user_messages.append(system_message)
+            if isinstance(user_messages, list)
+            else [system_message]
+        )
         system_message = None
 
     # Anthropic passes the system messages as a separate argument
@@ -88,7 +92,7 @@ def query(
 
     t0 = time.time()
     logger.info(f"Sending request to Anthropic API with {len(messages)} messages.")
-    
+
     message = backoff_create(
         _client.messages.create,
         ANTHROPIC_TIMEOUT_EXCEPTIONS,
@@ -101,39 +105,56 @@ def query(
 
     info = {
         "stop_reason": message.stop_reason,
-    } 
-    if functions is None or all(content.type != "tool_use" for content in message.content):
+    }
+    if functions is None or all(
+        content.type != "tool_use" for content in message.content
+    ):
         output = "\n\n".join(content.text for content in message.content)
         return output, req_time, in_tokens, out_tokens, info
-    else: 
+    else:
         tool_results, assistant_response = [], []
         for content in message.content:
-            if content.type == "text": 
+            if content.type == "text":
                 assistant_response.insert(0, {"type": "text", "text": content.text})
             if content.type == "tool_use":
                 func = get_function(content.name)
                 if func is None:
                     action_cls = get_action(content.name)
-                    if action_cls: 
+                    if action_cls:
                         action = action_cls(**content.input)
                         action.tool_call_metadata = {
                             "provider": "anthropic",
-                            "tool_call_id": content.id
+                            "tool_call_id": content.id,
                         }
                         return action, req_time, in_tokens, out_tokens, info
-                    logger.warning(f"Function {content.name} not found, returning arguments.")
+                    logger.warning(
+                        f"Function {content.name} not found, returning arguments."
+                    )
                     return content.input, req_time, in_tokens, out_tokens, info
                 else:
                     tool_result = func(**content.input)
-                    assistant_response.append({"type": "tool_use", "id": content.id, "name": content.name, "input": content.input})
-                    tool_results.append({"type": "tool_result", "tool_use_id": content.id, "content": tool_result})
-        
+                    assistant_response.append(
+                        {
+                            "type": "tool_use",
+                            "id": content.id,
+                            "name": content.name,
+                            "input": content.input,
+                        }
+                    )
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": content.id,
+                            "content": tool_result,
+                        }
+                    )
+
         if isinstance(user_messages, list):
             user_messages.append({"role": "assistant", "content": assistant_response})
         else:
             user_messages = [{"role": "assistant", "content": assistant_response}]
-        
-        user_messages.append({"role": "user", "content": tool_results})        
+
+        user_messages.append({"role": "user", "content": tool_results})
 
         next_output, next_req_time, next_in_tokens, next_out_tokens, next_info = query(
             system_message=system_message,
@@ -142,26 +163,28 @@ def query(
             convert_system_to_user=convert_system_to_user,
             **model_kwargs,
         )
-        
+
         # Aggregate metrics
         req_time += next_req_time
         in_tokens += next_in_tokens
         out_tokens += next_out_tokens
-        info = {
-            "calls": [info, next_info]  # Combine metadata
-        }
-        
+        info = {"calls": [info, next_info]}  # Combine metadata
+
         return next_output, req_time, in_tokens, out_tokens, info
 
+
 class AnthropicFunctionSpec(FunctionSpec):
-    def __init__(self, tools: Union[List, Dict[str, Any], Type], ):
+    def __init__(
+        self,
+        tools: Union[List, Dict[str, Any], Type],
+    ):
         super().__init__(tools)
 
     @property
     def tool_dict(self):
         if isinstance(self.tools, List):
             return [convert_to_anthropic_tool(tool) for tool in self.tools]
-        
+
         return [convert_to_anthropic_tool(self.tools)]
 
     @property
@@ -170,8 +193,5 @@ class AnthropicFunctionSpec(FunctionSpec):
             return {
                 "type": "auto",
             }
-        
-        return {
-            "type": "tool",
-            "name": self.tools.__name__
-        }
+
+        return {"type": "tool", "name": self.tools.__name__}

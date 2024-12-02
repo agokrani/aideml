@@ -1,4 +1,3 @@
-
 import asyncio
 import sys
 import atexit
@@ -97,7 +96,9 @@ def journal_to_string_tree(journal: Journal) -> str:
 
 async def run():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config-path", type=str, help="Path to the configuration file")
+    parser.add_argument(
+        "--config-path", type=str, help="Path to the configuration file"
+    )
     args, _ = parser.parse_known_args()
 
     cfg = load_cfg(args.config_path)
@@ -169,7 +170,7 @@ async def run():
         res = interpreter.run(*args, **kwargs)
         status.update("[green]Generating code...")
         return res
-    
+
     def generate_live():
         tree = journal_to_rich_tree(journal)
         prog.update(prog.task_ids[0], completed=global_step)
@@ -181,10 +182,10 @@ async def run():
         ]
 
         # Truncate the task description to a fixed number of lines
-        task_desc_lines = task_desc_str.strip().split('\n')
+        task_desc_lines = task_desc_str.strip().split("\n")
         max_lines = 10  # Number of lines to display
         if len(task_desc_lines) > max_lines:
-            task_desc_display = '\n'.join(task_desc_lines[:max_lines])
+            task_desc_display = "\n".join(task_desc_lines[:max_lines])
             task_desc_display += "..."
         else:
             task_desc_display = task_desc_str.strip()
@@ -208,19 +209,20 @@ async def run():
             title=f'[b]AIDE is working on experiment: [bold green]"{cfg.exp_name}[/b]"',
             subtitle="Press [b]Ctrl+C[/b] to stop the run",
         )
-    if cfg.debug: 
+
+    if cfg.debug:
         while global_step < cfg.agent.steps:
             await agent.step(exec_callback=exec_callback)
             # on the last step, print the tree
             if global_step == cfg.agent.steps - 1:
                 logger.info(journal_to_string_tree(journal))
             save_run(cfg, journal)
-            global_step = len(journal)    
-    else: 
+            global_step = len(journal)
+    else:
         with Live(
-           generate_live(),
-           refresh_per_second=16,
-           screen=True,
+            generate_live(),
+            refresh_per_second=16,
+            screen=True,
         ) as live:
             while global_step < cfg.agent.steps:
                 await agent.step(exec_callback=exec_callback)
@@ -236,10 +238,10 @@ async def run():
         print("Generating final report from journal...")
         report = journal2report(journal, task_desc, cfg.report)
         print(report)
-        report_file_path = cfg.log_dir / 'report.md'
+        report_file_path = cfg.log_dir / "report.md"
         with open(report_file_path, "w") as f:
             f.write(report)
-        print('Report written to file:', report_file_path)
+        print("Report written to file:", report_file_path)
 
 
 if __name__ == "__main__":

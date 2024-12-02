@@ -50,6 +50,7 @@ def backoff_create(
         logger.info(f"Backoff exception: {e}")
         return False
 
+
 def opt_messages_to_list(
     system_message: str | None,
     user_messages: List | None,
@@ -64,16 +65,23 @@ def opt_messages_to_list(
     if user_messages is None:
         user_messages = []
     else:
-        user_messages = [{"role": "user", "content": message} if isinstance(message, str) else message for message in user_messages]
+        user_messages = [
+            (
+                {"role": "user", "content": message}
+                if isinstance(message, str)
+                else message
+            )
+            for message in user_messages
+        ]
     messages.extend(user_messages)
-    
+
     return messages
+
 
 def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
     if isinstance(prompt, str):
         return prompt.strip() + "\n"
     elif isinstance(prompt, list):
-        import pdb; pdb.set_trace()
         return "\n".join([f"- {s.strip()}" for s in prompt] + ["\n"])
 
     out = []
@@ -86,16 +94,17 @@ def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
 
 @dataclass
 class FunctionSpec(DataClassJsonMixin):
-    tools: Union[List, Dict[str, Any], Type] # Pydantic Object to be converted to OpenAI tool dict or Anthropic tool class 
-    
+    tools: Union[
+        List, Dict[str, Any], Type
+    ]  # Pydantic Object to be converted to OpenAI tool dict or Anthropic tool class
+
     def __init__(self, tools: Union[List, Dict[str, Any], Type]):
         self.tools = tools
 
     @property
     def tool_dict(self):
         pass
-    
+
     @property
     def tool_choice_dict(self):
-        pass 
-
+        pass

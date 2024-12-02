@@ -1,6 +1,7 @@
 import inspect
 from typing import Callable, Any, Dict
 
+
 class CallbackManager:
     def __init__(self):
         self.callbacks: Dict[str, Callable[..., Any]] = {}
@@ -14,7 +15,7 @@ class CallbackManager:
             callback (Callable): The callback function.
         """
         self.callbacks[name] = callback
-    
+
     def register_callbacks(self, callbacks: Dict[str, Callable[..., Any]]):
         """
         Registers multiple callback functions with specific names.

@@ -100,18 +100,19 @@ class Node(DataClassJsonMixin):
         if self.stage_name != "debug":
             return 0
         return self.parent.debug_depth + 1  # type: ignore
-    
+
     def generate_summary(self, include_code=False) -> str:
         """Generate a summary of the node for the agent."""
         summary = f"Design: {self.plan}\n\n"
         if include_code:
             summary += f"Code: {self.code}\n\n"
         summary += f"Results: {self.analysis}\n\n"
-        
+
         if self.metric.value is not None:
             summary += f"Validation Metric: {self.metric.value}\n\n"
-        
+
         return summary
+
 
 @dataclass
 class InteractiveSession(DataClassJsonMixin):
@@ -142,7 +143,7 @@ class InteractiveSession(DataClassJsonMixin):
 
         return "\n".join(trace).strip()
 
-    
+
 @dataclass
 class Journal(DataClassJsonMixin):
     """A collection of nodes representing the solution tree."""
