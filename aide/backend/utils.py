@@ -2,34 +2,12 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Type, Union
 
-import jsonschema
 from dataclasses_json import DataClassJsonMixin
 import backoff
-import logging
-from typing import Callable
 
 PromptType = str | dict | list
 FunctionCallType = dict
 OutputType = str | FunctionCallType
-
-import backoff
-
-logger = logging.getLogger("aide")
-
-
-@backoff.on_predicate(
-    wait_gen=backoff.expo,
-    max_value=60,
-    factor=1.5,
-)
-def backoff_create(
-    create_fn: Callable, retry_exceptions: list[Exception], *args, **kwargs
-):
-    try:
-        return create_fn(*args, **kwargs)
-    except retry_exceptions as e:
-        logger.info(f"Backoff exception: {e}")
-        return False
 
 
 logger = logging.getLogger("aide")
@@ -82,18 +60,21 @@ def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
 
 @dataclass
 class FunctionSpec(DataClassJsonMixin):
-    tool: Union[Dict[str, Any], Type] # Pydantic Object to be converted to OpenAI tool dict or Anthropic tool class 
-    
+    tool: Union[
+        Dict[str, Any], Type
+    ]  # Pydantic Object to be converted to OpenAI tool dict or Anthropic tool class
+
     def __init__(self, tool: Union[Dict[str, Any], Type]):
         self.tool = tool
 
     @property
     def tool_dict(self):
         pass
-    
+
     @property
     def tool_choice_dict(self):
-        pass 
+        pass
+
 
 # @dataclass
 # class FunctionSpec(DataClassJsonMixin):

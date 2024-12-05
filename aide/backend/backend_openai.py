@@ -18,8 +18,6 @@ from funcy import notnone, once, select_values
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 
-
-
 logger = logging.getLogger("aide")
 
 _client: openai.OpenAI = None  # type: ignore
@@ -49,7 +47,9 @@ def query(
     _setup_openai_client()
     filtered_kwargs: dict = select_values(notnone, model_kwargs)  # type: ignore
 
-    messages = opt_messages_to_list(system_message, user_message, convert_system_to_user=convert_system_to_user)
+    messages = opt_messages_to_list(
+        system_message, user_message, convert_system_to_user=convert_system_to_user
+    )
 
     if function is not None:
         func_spec = OpenAIFunctionSpec(function)

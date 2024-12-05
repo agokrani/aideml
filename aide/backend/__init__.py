@@ -2,7 +2,7 @@ import logging
 
 from pydantic import BaseModel
 from . import backend_anthropic, backend_openai, backend_openrouter, backend_gdm
-from .utils import FunctionSpec, OutputType, PromptType, compile_prompt_to_md
+from .utils import OutputType, PromptType, compile_prompt_to_md
 
 logger = logging.getLogger("aide")
 
@@ -67,7 +67,9 @@ def query(
     if user_message:
         logger.info(f"user: {user_message}", extra={"verbose": True})
     if function:
-        logger.info(f"function spec: {function.model_json_schema()}", extra={"verbose": True})
+        logger.info(
+            f"function spec: {function.model_json_schema()}", extra={"verbose": True}
+        )
 
     provider = determine_provider(model)
     query_func = provider_to_query_func[provider]
@@ -79,6 +81,6 @@ def query(
         **model_kwargs,
     )
     logger.info(f"response: {output}", extra={"verbose": True})
-    logger.info(f"---Query complete---", extra={"verbose": True})
+    logger.info("---Query complete---", extra={"verbose": True})
 
     return output

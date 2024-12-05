@@ -10,7 +10,7 @@ from google.generativeai.generative_models import generation_types
 
 from funcy import once
 from pydantic import BaseModel
-from .utils import FunctionSpec, OutputType, backoff_create
+from .utils import OutputType, backoff_create
 
 logger = logging.getLogger("aide")
 

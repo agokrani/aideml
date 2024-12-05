@@ -5,7 +5,7 @@ import time
 from typing import Any, Callable, cast
 from pydantic import BaseModel, Field
 import humanize
-from .backend import FunctionSpec, query
+from .backend import query
 from .interpreter import ExecutionResult
 from .journal import Journal, Node
 from .utils import data_preview
@@ -22,13 +22,26 @@ def format_time(time_in_sec: int):
 
 ExecCallbackType = Callable[[str, bool], ExecutionResult]
 
+
 class SubmitReview(BaseModel):
     """Submit a review evaluating the output of the training script."""
-    is_bug: bool = Field(description="true if the output log shows that the execution failed or has some bug, otherwise false.")
-    has_csv_submission: bool = Field(description="true if the code saves the predictions on the test data")
-    summary: str = Field(description="write a short summary (2-3 sentences) describing the empirical findings. Alternatively mention if there is a bug or the submission.csv was not properly produced. DO NOT suggest fixes or improvements.")
-    metric: float = Field(description="If the code ran successfully, report the value of the validation metric. Otherwise, leave it null.")
-    lower_is_better: bool = Field(description="true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy).")
+
+    is_bug: bool = Field(
+        description="true if the output log shows that the execution failed or has some bug, otherwise false."
+    )
+    has_csv_submission: bool = Field(
+        description="true if the code saves the predictions on the test data"
+    )
+    summary: str = Field(
+        description="write a short summary (2-3 sentences) describing the empirical findings. Alternatively mention if there is a bug or the submission.csv was not properly produced. DO NOT suggest fixes or improvements."
+    )
+    metric: float = Field(
+        description="If the code ran successfully, report the value of the validation metric. Otherwise, leave it null."
+    )
+    lower_is_better: bool = Field(
+        description="true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy)."
+    )
+
 
 class Agent:
     def __init__(
@@ -403,8 +416,8 @@ class Agent:
             response["is_bug"]
             or node.exc_type is not None
             or response["metric"] is None
-            or response["has_csv_submission"] == False
-            or has_csv_submission == False
+            or not response["has_csv_submission"]
+            or not has_csv_submission
         )
 
         if node.is_buggy:

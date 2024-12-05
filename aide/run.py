@@ -1,4 +1,3 @@
-
 import sys
 import atexit
 import logging
@@ -38,7 +37,6 @@ class VerboseFilter(logging.Filter):
 
     def filter(self, record):
         return not (hasattr(record, "verbose") and record.verbose)
-
 
 
 def journal_to_rich_tree(journal: Journal):
@@ -96,9 +94,11 @@ def journal_to_string_tree(journal: Journal) -> str:
 
 def run():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config-path", type=str, help="Path to the configuration file")
+    parser.add_argument(
+        "--config-path", type=str, help="Path to the configuration file"
+    )
     args, _ = parser.parse_known_args()
-    
+
     cfg = load_cfg(args.config_path)
     log_format = "[%(asctime)s] %(levelname)s: %(message)s"
     logging.basicConfig(
@@ -180,10 +180,10 @@ def run():
         ]
 
         # Truncate the task description to a fixed number of lines
-        task_desc_lines = task_desc_str.strip().split('\n')
+        task_desc_lines = task_desc_str.strip().split("\n")
         max_lines = 10  # Number of lines to display
         if len(task_desc_lines) > max_lines:
-            task_desc_display = '\n'.join(task_desc_lines[:max_lines])
+            task_desc_display = "\n".join(task_desc_lines[:max_lines])
             task_desc_display += "..."
         else:
             task_desc_display = task_desc_str.strip()
@@ -207,19 +207,20 @@ def run():
             title=f'[b]AIDE is working on experiment: [bold green]"{cfg.exp_name}[/b]"',
             subtitle="Press [b]Ctrl+C[/b] to stop the run",
         )
-    if cfg.debug: 
+
+    if cfg.debug:
         while global_step < cfg.agent.steps:
             agent.step(exec_callback=exec_callback)
             # on the last step, print the tree
             if global_step == cfg.agent.steps - 1:
                 logger.info(journal_to_string_tree(journal))
             save_run(cfg, journal)
-            global_step = len(journal)    
-    else: 
+            global_step = len(journal)
+    else:
         with Live(
-           generate_live(),
-           refresh_per_second=16,
-           screen=True,
+            generate_live(),
+            refresh_per_second=16,
+            screen=True,
         ) as live:
             while global_step < cfg.agent.steps:
                 agent.step(exec_callback=exec_callback)

@@ -10,7 +10,6 @@ import rich
 from omegaconf import OmegaConf
 from rich.syntax import Syntax
 import shutup
-from rich.logging import RichHandler
 import logging
 
 from aide.journal import Journal, filter_journal
@@ -98,7 +97,8 @@ def _get_next_logindex(dir: Path) -> int:
 
 
 def _load_cfg(
-    path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml", use_cli_args=True
+    path: Path = Path(__file__).parent.parent.parent / "configs" / "config.yaml",
+    use_cli_args=True,
 ) -> Config:
     cfg = OmegaConf.load(path)
     if use_cli_args:
@@ -106,7 +106,9 @@ def _load_cfg(
     return cfg
 
 
-def load_cfg(path: Path = Path(__file__).parent.parent.parent/ "configs" / "config.yaml") -> Config:
+def load_cfg(
+    path: Path = Path(__file__).parent.parent.parent / "configs" / "config.yaml",
+) -> Config:
     """Load config from .yaml file and CLI args, and set up logging directory."""
     return prep_cfg(_load_cfg(path))
 
@@ -114,7 +116,7 @@ def load_cfg(path: Path = Path(__file__).parent.parent.parent/ "configs" / "conf
 def prep_cfg(cfg: Config):
     if "--config-path" in cfg.keys():
         cfg.pop("--config-path")
-    
+
     if cfg.data_dir is None:
         raise ValueError("`data_dir` must be provided.")
 
@@ -244,4 +246,4 @@ def output_file_or_placeholder(file: Path):
         else:
             return json.dumps(json.loads(file.read_text()), indent=4)
     else:
-        return f"File not found."
+        return "File not found."

@@ -69,17 +69,15 @@ def query(
         **filtered_kwargs,
     )
     req_time = time.time() - t0
-    if function is None: 
+    if function is None:
         assert len(message.content) == 1 and message.content[0].type == "text"
         output = message.content[0].text
     else:
         assert (
             len(message.content) >= 1 and message.content[0].type == "tool_use"
         ), f"function_call is empty, it is not a function call: {message.content}"
-        
-        assert (
-            message.content[0].name == function.__name__
-        ), "Function name mismatch"
+
+        assert message.content[0].name == function.__name__, "Function name mismatch"
         try:
             output = message.content[0].input
         except json.JSONDecodeError as e:
@@ -99,7 +97,10 @@ def query(
 
 
 class AnthropicFunctionSpec(FunctionSpec):
-    def __init__(self, tool: Union[Dict[str, Any], Type], ):
+    def __init__(
+        self,
+        tool: Union[Dict[str, Any], Type],
+    ):
         super().__init__(tool)
 
     @property
@@ -108,7 +109,4 @@ class AnthropicFunctionSpec(FunctionSpec):
 
     @property
     def tool_choice_dict(self) -> dict:
-        return {
-            "type": "tool",
-            "name": self.tool.__name__
-        }
+        return {"type": "tool", "name": self.tool.__name__}

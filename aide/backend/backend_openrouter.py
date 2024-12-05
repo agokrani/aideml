@@ -9,7 +9,6 @@ import openai
 from pydantic import BaseModel
 
 from aide.backend.utils import (
-    FunctionSpec,
     OutputType,
     backoff_create,
 )
