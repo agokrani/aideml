@@ -134,7 +134,6 @@ def query(
                     )
                 else:
                     tool_result = func(**json.loads(tool_call.function.arguments))
-                    # tool_results.append({"role": "tool", "content": tool_result, "tool_call_id": tool_call.id})
                     tool_results.append(
                         get_tool_response_message(tool_call.id, tool_result)
                     )

@@ -97,3 +97,6 @@ class SubmitReview(Action):
     lower_is_better: bool = Field(
         description="true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy)."
     )
+    missing_libraries: list[str] | None = Field(
+        description="list of libraries that are missing in the code execution environment if the node is buggy due to missing libraries. Please only give out this list when the node is buggy due to missing libraries else None or empty list."
+    )

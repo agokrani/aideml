@@ -7,7 +7,7 @@ from aide.utils.metric import WorstMetricValue
 from aide.workflow.base import Workflow
 from aide.agent import Agent, ActionAgent
 from aide.interpreter import Interpreter
-from aide.utils.config import Config
+from aide.utils.config import Config, save_run
 from aide.backend import provider_to_tool_response_message_func
 
 import logging
@@ -43,9 +43,20 @@ class CoPilot(Workflow):
         messages = []
         current_node = None
         if len(self.journal) == 0:
+            await self.callback_manager.execute_callback(
+                "stage_start",
+                "initial_research",
+                message="Performing ",
+                supress_errors=True,
+            )
             messages.append(
                 {"role": "assistant", "content": self.agent.get_initial_research()}
             )
+
+            await self.callback_manager.execute_callback(
+                "stage_end", supress_errors=True
+            )
+
             await self.callback_manager.execute_callback(
                 "tool_output", self.agent.get_initial_research()
             )
@@ -84,7 +95,16 @@ class CoPilot(Workflow):
         while True:
             if self.cfg.agent.data_preview and self.agent.data_preview is None:
                 logger.info("Updating data preview...")
+                await self.callback_manager.execute_callback(
+                    "stage_start",
+                    "data_preview",
+                    message="Updating ",
+                    supress_errors=True,
+                )
                 self.agent.update_data_preview()
+                await self.callback_manager.execute_callback(
+                    "stage_end", supress_errors=True
+                )
 
             user_feedback = await self.callback_manager.execute_callback("user_input")
 
@@ -95,7 +115,13 @@ class CoPilot(Workflow):
 
             messages.append({"role": "user", "content": user_feedback})
 
+            await self.callback_manager.execute_callback(
+                "stage_start", "next action", message="Predicting ", supress_errors=True
+            )
             next_action = await action_agent.predict_next_action(user_messages=messages)
+            await self.callback_manager.execute_callback(
+                "stage_end", supress_errors=True
+            )
 
             if isinstance(next_action, Finish):
                 await self.callback_manager.execute_callback(
@@ -112,10 +138,16 @@ class CoPilot(Workflow):
                 "exec", current_node.code, True
             )
 
-            current_node = self.agent.parse_exec_result(
+            current_node = await self.agent.parse_exec_result(
                 node=current_node,
                 exec_result=exec_result,
+                callback_manager=self.callback_manager
             )
+
+            message = f"Results from the current solution:\n\n"
+            message += f"{current_node.generate_summary()}"
+
+            await self.callback_manager.execute_callback("tool_output", message)
 
             if not current_node.is_buggy:
                 if not (
@@ -130,9 +162,6 @@ class CoPilot(Workflow):
                         "tool_output",
                         f"Actually, node {current_node.id} did not produce a submission.csv",
                     )
-
-            message = f"results of current solution from the {current_node.stage_name} step:\n\n"
-            message += f"{current_node.generate_summary()}"
 
             tool_response_func = provider_to_tool_response_message_func[
                 next_action.tool_call_metadata["provider"]
@@ -177,13 +206,22 @@ class CoPilot(Workflow):
                     logger.info(f"Node {current_node.id} is not the best node")
                     logger.info(f"Node {best_node.id} is still the best node")
 
+            save_run(self.cfg, self.journal)
+
     async def step(self, action: BaseModel, parent_node: Node | None = None):
+
+        await self.callback_manager.execute_callback(
+            "stage_start", action.__class__.__name__, supress_errors=True
+        )
+
         if isinstance(action, Draft):
             result_node = self.agent._draft([action.user_feedback])
         elif isinstance(action, Improve):
             result_node = self.agent._improve(parent_node, [action.user_feedback])
         elif isinstance(action, Debug):
-            self.agent._debug(parent_node, [action.user_feedback])
+            result_node = self.agent._debug(parent_node, [action.user_feedback])
+
+        await self.callback_manager.execute_callback("stage_end", supress_errors=True)
 
         await self.callback_manager.execute_callback(
             "tool_output", f"plan:\n{result_node.plan}\n\n"

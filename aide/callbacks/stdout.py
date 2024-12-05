@@ -1,21 +1,7 @@
 import sys
-from aide.interpreter import Interpreter
 from rich.live import Live
-
-
-async def emit_output(output, **kwargs):
-    """
-    Callback function to emit output to stdout.
-    """
-    print(output)
-
-
-# def read_input():
-#     """
-#     Callback function to read input from stdin.
-#     """
-#     show = "> "
-#     return input(show)
+from rich.spinner import Spinner
+from aide.interpreter import Interpreter
 
 
 def read_input():
@@ -48,11 +34,12 @@ def execute_code(interpreter: Interpreter):
         Wraps interpreter execution with live updates.
         """
         message = "Executing code..."
+        spinner = Spinner("dots", text=f"[magenta]{message}[/magenta]")
         with Live(
-            f"[bold red]{message}[/bold red]", refresh_per_second=4
+            spinner, refresh_per_second=4
         ) as live:  # Adjust refresh rate as needed
             result = interpreter.run(*args, **kwargs)
-            live.update(f"[bold green]Done Executing the code[/bold green]")
+            live.update(f"[bold red]Done Executing the code[/bold red]")
         return result
 
     return callback

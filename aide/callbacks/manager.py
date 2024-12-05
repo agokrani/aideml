@@ -25,7 +25,9 @@ class CallbackManager:
         """
         self.callbacks.update(callbacks)
 
-    async def execute_callback(self, name: str, *args, **kwargs) -> Any:
+    async def execute_callback(
+        self, name: str, *args, supress_errors: bool = False, **kwargs
+    ) -> Any:
         """
         Executes a registered callback (sync or async) by its name.
 
@@ -37,7 +39,10 @@ class CallbackManager:
             Any: The result of the callback, if it exists.
         """
         if name not in self.callbacks:
-            raise ValueError(f"No callback registered with name '{name}'")
+            if not supress_errors:
+                raise ValueError(f"No callback registered with name '{name}'")
+            else:
+                return None
 
         callback = self.callbacks[name]
         if inspect.iscoroutinefunction(callback):

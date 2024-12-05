@@ -35,6 +35,7 @@ class StageConfig:
 class InitialSolutionConfig:
     exp_name: str | None
     node_id: str | None
+    code_file: str | None
 
 
 @dataclass

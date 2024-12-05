@@ -23,15 +23,19 @@ class AutoPilot(Workflow):
             callback_manager if callback_manager is not None else CallbackManager()
         )
 
-        self.callback_manager.register_callback("exec", self.interpreter.run)
+        try:
+            self.callback_manager.callbacks["exec"]
+        except KeyError:
+            self.callback_manager.register_callback("exec", self.interpreter.run)
 
-    def run(self):
+    async def run(self):
         global_step = len(self.journal)
         while global_step < self.cfg.agent.steps:
             # Execute one step of the agent
-            self.agent.step(callback_manager=self.callback_manager)
+            await self.agent.step(callback_manager=self.callback_manager)
             # Save the current state
             save_run(self.cfg, self.journal)
             global_step = len(self.journal)
+            await self.callback_manager.execute_callback("tool_output")
         # Cleanup the interpreter session
         self.interpreter.cleanup_session()

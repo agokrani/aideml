@@ -56,21 +56,18 @@ def _walk(path: Path):
         yield p
 
 
-def preview_csv(p: Path, file_name: str, simple=True) -> str:
-    """Generate a textual preview of a csv file
+def _generate_dataframe_preview(df: pd.DataFrame, file_name: str, simple=True) -> str:
+    """Generate a textual preview from a pandas DataFrame
 
     Args:
-        p (Path): the path to the csv file
+        df (pd.DataFrame): dataframe to preview
         file_name (str): the file name to use in the preview
-        simple (bool, optional): whether to use a simplified version of the preview. Defaults to True.
+        simple (bool, optional): whether to use a simplified version. Defaults to True.
 
     Returns:
-        str: the textual preview
+        str: the textual preview with basic stats or detailed column information
     """
-    df = pd.read_csv(p)
-
     out = []
-
     out.append(f"-> {file_name} has {df.shape[0]} rows and {df.shape[1]} columns.")
 
     if simple:
@@ -86,7 +83,6 @@ def preview_csv(p: Path, file_name: str, simple=True) -> str:
         for col in sorted(df.columns):
             dtype = df[col].dtype
             name = f"{col} ({dtype})"
-
             nan_count = df[col].isnull().sum()
 
             if dtype == "bool":
@@ -106,6 +102,18 @@ def preview_csv(p: Path, file_name: str, simple=True) -> str:
                 )
 
     return "\n".join(out)
+
+
+def preview_parquet(p: Path, file_name: str, simple=True) -> str:
+    """Generate a textual preview of a parquet file"""
+    df = pd.read_parquet(p)
+    return _generate_dataframe_preview(df, file_name, simple)
+
+
+def preview_csv(p: Path, file_name: str, simple=True) -> str:
+    """Generate a textual preview of a csv file"""
+    df = pd.read_csv(p)
+    return _generate_dataframe_preview(df, file_name, simple)
 
 
 def preview_json(p: Path, file_name: str):

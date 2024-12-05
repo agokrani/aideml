@@ -8,6 +8,7 @@ import humanize
 
 from aide.function import SearchArxiv, SearchPapersWithCode
 from aide.actions import Debug, Draft, Improve, Finish, SubmitReview
+from aide.utils.util import install_missing_libraries
 from .backend import query
 from .interpreter import ExecutionResult
 from .journal import Journal, Node
@@ -299,7 +300,7 @@ class Agent:
 
         return advice
 
-    def _draft(self, user_messages: List | None) -> Node:
+    def _draft(self, user_messages: List | None = None) -> Node:
         advice = self._advisor()
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
@@ -342,7 +343,7 @@ class Agent:
         logger.info(f"Drafted new node {new_node.id}")
         return new_node
 
-    def _improve(self, parent_node: Node, user_messages: List | None) -> Node:
+    def _improve(self, parent_node: Node, user_messages: List | None = None) -> Node:
         introduction = (
             "You are a Kaggle grandmaster attending a competition. You are provided with a previously developed "
             "solution below and should improve it in order to further increase the (test time) performance. "
@@ -384,7 +385,7 @@ class Agent:
         logger.info(f"Improved node {parent_node.id} to create new node {new_node.id}")
         return new_node
 
-    def _debug(self, parent_node: Node, user_messages=List | None) -> Node:
+    def _debug(self, parent_node: Node, user_messages: List | None = None) -> Node:
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
             "Your previous solution had a bug and/or did not produce a submission.csv, "
@@ -442,19 +443,41 @@ class Agent:
         logger.info(f"Agent is generating code, parent node type: {type(parent_node)}")
 
         if parent_node is None:
+            await callback_manager.execute_callback(
+                "stage_start", "Draft", supress_errors=True
+            )
             result_node = self._draft()
+            await callback_manager.execute_callback(
+                "stage_end", "Draft", supress_errors=True
+            )
         elif parent_node.is_buggy:
+            await callback_manager.execute_callback(
+                "stage_start", "Debug", supress_errors=True
+            )
             result_node = self._debug(parent_node)
+            await callback_manager.execute_callback(
+                "stage_end", "Debug", supress_errors=True
+            )
         else:
+            await callback_manager.execute_callback(
+                "stage_start", "Improve", supress_errors=True
+            )
             result_node = self._improve(parent_node)
+            await callback_manager.execute_callback(
+                "stage_end", "Improve", supress_errors=True
+            )
         if exec_callback:
             exec_result = exec_callback(result_node.code, True)
         else:
-            exec_result = await callback_manager.execute("exec", result_node.code, True)
+            exec_result = await callback_manager.execute_callback(
+                "exec", result_node.code, True
+            )
 
         result_node = self.parse_exec_result(
             node=result_node,
             exec_result=exec_result,
+            exec_callback=exec_callback,
+            callback_manager=callback_manager
         )
         # handle final cases where we missed buggy nodes somehow
         if not result_node.is_buggy:
@@ -492,7 +515,15 @@ class Agent:
                 logger.info(f"Node {best_node.id} is still the best node")
         self.current_step += 1
 
-    def parse_exec_result(self, node: Node, exec_result: ExecutionResult) -> Node:
+    async def parse_exec_result(
+        self,
+        node: Node,
+        exec_result: ExecutionResult,
+        attempts=0,
+        max_attempts=3,
+        exec_callback: ExecCallbackType = None,
+        callback_manager=None,
+    ) -> Node:
         logger.info(f"Agent is parsing execution results for node {node.id}")
 
         node.absorb_exec_result(exec_result)
@@ -526,6 +557,38 @@ class Agent:
         if not isinstance(response, SubmitReview):
             logger.error(f"Expected SubmitReview but got {type(response)}")
             return None
+
+        if response.missing_libraries is not None and len(response.missing_libraries) > 0:
+            if attempts < max_attempts:
+                logger.info(
+                    f"Agent is missing libraries, attempting to install them: {response.missing_libraries}"
+                )
+                # install missing libraries
+                install_missing_libraries(response.missing_libraries)
+                # Re-execute the code after installing libraries
+                if exec_callback:
+                    exec_result = exec_callback(node.code, True)
+                else:
+                    exec_result = await callback_manager.execute_callback(
+                        "exec", node.code, True
+                    )
+                # Recursively parse the new execution result
+                return await self.parse_exec_result(
+                    node=node,
+                    exec_result=exec_result,
+                    exec_callback=exec_callback,
+                    callback_manager=callback_manager,
+                    attempts=attempts + 1,
+                    max_attempts=max_attempts,
+                )
+            else:
+                logger.info(
+                    "Maximum attempts reached while trying to install missing libraries"
+                )
+        else:
+            logger.info(
+                "Maximun attempts reached while trying to install missing libraries"
+            )
 
         # if the metric isn't a float then fill the metric with the worst metric
         if not isinstance(response.metric, float):
