@@ -95,3 +95,5 @@ backoff
 langchain
 langchain-core
 langchain-anthropic
+streamlit==1.40.2
+python-dotenv

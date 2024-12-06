@@ -26,7 +26,6 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from rich.text import Text
-from rich.markdown import Markdown
 from rich.status import Status
 from rich.tree import Tree
 from .utils.config import load_task_desc, prep_agent_workspace, save_run, load_cfg

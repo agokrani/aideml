@@ -68,16 +68,14 @@ class CoPilot(Workflow):
         else:
             best_node = self.journal.get_best_node()
             if best_node is not None:
-                best_solution_message = f"Best solution found so far:\n\n"
+                best_solution_message = "Best solution found so far:\n\n"
                 best_solution_message += f"{best_node.generate_summary()}"
                 messages.append({"role": "assistant", "content": best_solution_message})
                 await self.callback_manager.execute_callback(
                     "tool_output", best_solution_message
                 )
 
-                message = (
-                    f"Would you like to improve this solution? or draft a new one?"
-                )
+                message = "Would you like to improve this solution? or draft a new one?"
                 messages.append({"role": "assistant", "content": message})
                 await self.callback_manager.execute_callback("tool_output", message)
                 current_node = best_node
@@ -85,7 +83,7 @@ class CoPilot(Workflow):
                 assert (
                     len(self.journal) == 1
                 ), "Please specify node_id of the initial solution in the config"
-                message = f"Solution found so far:\n\n"
+                message = "Solution found so far:\n\n"
                 message += f"{self.journal[0].generate_summary()}"
                 message += "Would you like to debug/improve the current soluton or would you like to draft a new one?"
                 messages.append({"role": "assistant", "content": message})
@@ -126,7 +124,7 @@ class CoPilot(Workflow):
             if isinstance(next_action, Finish):
                 await self.callback_manager.execute_callback(
                     "tool_output",
-                    f"""It appears that you are satisfied with the current solution or wish to conclude the process. 
+                    """It appears that you are satisfied with the current solution or wish to conclude the process. 
                     To exit, please use the /exit command. Alternatively, you may continue to refine the solution.""",
                 )
                 continue
@@ -141,10 +139,10 @@ class CoPilot(Workflow):
             current_node = await self.agent.parse_exec_result(
                 node=current_node,
                 exec_result=exec_result,
-                callback_manager=self.callback_manager
+                callback_manager=self.callback_manager,
             )
 
-            message = f"Results from the current solution:\n\n"
+            message = "Results from the current solution:\n\n"
             message += f"{current_node.generate_summary()}"
 
             await self.callback_manager.execute_callback("tool_output", message)

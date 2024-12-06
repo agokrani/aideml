@@ -2,36 +2,13 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Type, Union, List
 
-import jsonschema
 from dataclasses_json import DataClassJsonMixin
+import backoff
 
 PromptType = str | dict | list
 FunctionCallType = dict
 OutputType = str | FunctionCallType
 
-import backoff
-
-logger = logging.getLogger("aide")
-
-
-@backoff.on_predicate(
-    wait_gen=backoff.expo,
-    max_value=60,
-    factor=1.5,
-)
-def backoff_create(
-    create_fn: Callable, retry_exceptions: list[Exception], *args, **kwargs
-):
-    try:
-        return create_fn(*args, **kwargs)
-    except retry_exceptions as e:
-        logger.info(f"Backoff exception: {e}")
-        return False
-
-
-import backoff
-import logging
-from typing import Callable
 
 logger = logging.getLogger("aide")
 

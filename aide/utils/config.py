@@ -10,7 +10,6 @@ import rich
 from omegaconf import OmegaConf
 from rich.syntax import Syntax
 import shutup
-from rich.logging import RichHandler
 import logging
 
 from aide.journal import Journal, filter_journal
@@ -259,4 +258,4 @@ def output_file_or_placeholder(file: Path):
         else:
             return json.dumps(json.loads(file.read_text()), indent=4)
     else:
-        return f"File not found."
+        return "File not found."

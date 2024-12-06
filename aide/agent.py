@@ -2,10 +2,8 @@ import shutil
 import logging
 import random
 import time
-from typing import Any, Callable, List, cast
-from pydantic import BaseModel, Field
+from typing import Any, Callable, List
 import humanize
-
 from aide.function import SearchArxiv, SearchPapersWithCode
 from aide.actions import Debug, Draft, Improve, Finish, SubmitReview
 from aide.utils.util import install_missing_libraries
@@ -477,7 +475,7 @@ class Agent:
             node=result_node,
             exec_result=exec_result,
             exec_callback=exec_callback,
-            callback_manager=callback_manager
+            callback_manager=callback_manager,
         )
         # handle final cases where we missed buggy nodes somehow
         if not result_node.is_buggy:
@@ -558,7 +556,10 @@ class Agent:
             logger.error(f"Expected SubmitReview but got {type(response)}")
             return None
 
-        if response.missing_libraries is not None and len(response.missing_libraries) > 0:
+        if (
+            response.missing_libraries is not None
+            and len(response.missing_libraries) > 0
+        ):
             if attempts < max_attempts:
                 logger.info(
                     f"Agent is missing libraries, attempting to install them: {response.missing_libraries}"
@@ -603,9 +604,9 @@ class Agent:
         node.is_buggy = (
             response.is_bug
             or node.exc_type is not None
-            or response.metric is None
-            or response.has_csv_submission == False
-            or has_csv_submission == False
+            or response["metric"] is None
+            or not response["has_csv_submission"]
+            or not has_csv_submission
         )
 
         if node.is_buggy:

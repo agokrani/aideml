@@ -1,10 +1,8 @@
 import logging
 from typing import List
 from pydantic import BaseModel
-
-from aide.function import get_function
 from . import backend_anthropic, backend_openai, backend_openrouter, backend_gdm
-from .utils import FunctionSpec, OutputType, PromptType, compile_prompt_to_md
+from .utils import OutputType, PromptType, compile_prompt_to_md
 
 logger = logging.getLogger("aide")
 
@@ -104,7 +102,7 @@ def query(
     )
 
     logger.info(f"response: {output}", extra={"verbose": True})
-    logger.info(f"---Query complete---", extra={"verbose": True})
+    logger.info("---Query complete---", extra={"verbose": True})
     logger.info(f"in_tokens: {in_tok_count}, out_tokens: {out_tok_count}")
 
     return output

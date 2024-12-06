@@ -2,7 +2,6 @@ from aide.callbacks.manager import CallbackManager
 from aide.workflow.base import Workflow
 from aide.agent import Agent
 from aide.interpreter import Interpreter
-from aide.journal import Journal
 from aide.utils.config import Config
 from aide.utils.config import save_run
 
