@@ -1,3 +1,4 @@
+import asyncio
 import streamlit as st
 import streamlit.components.v1 as components
 from pathlib import Path
@@ -11,6 +12,9 @@ import sys
 from dotenv import load_dotenv
 import logging
 from aide import Experiment
+from aide.utils.config import _load_cfg, load_cfg, prep_cfg
+from aide.workflow.autopilot import AutoPilot
+from aide.workflow.copilot import CoPilot
 
 # Set up logging configuration
 logging.basicConfig(
@@ -68,6 +72,10 @@ class WebUI:
             st.session_state.progress = 0
         if "results" not in st.session_state:
             st.session_state.results = None
+        if "mode" not in st.session_state:
+            st.session_state.mode = "autopilot"
+        if "config_container_active" not in st.session_state:
+            st.session_state.config_container_active = False
 
     @staticmethod
     def setup_page():
@@ -127,10 +135,24 @@ class WebUI:
                 type="password",
                 label_visibility="collapsed",
             )
+
             if st.button("Save API Keys", use_container_width=True):
                 st.session_state.openai_key = openai_key
                 st.session_state.anthropic_key = anthropic_key
                 st.success("API keys saved!")
+
+            st.markdown(
+                "<p style='text-align: center;'>Mode</p>",
+                unsafe_allow_html=True,
+            )
+
+            mode = st.selectbox(
+                "Mode",
+                ("autopilot", "copilot"),
+                label_visibility="collapsed",
+            )
+
+            st.session_state.mode = mode
 
     def render_input_section(self, results_col):
         """
@@ -141,13 +163,65 @@ class WebUI:
         """
         st.header("Input")
         uploaded_files = self.handle_file_upload()
+        self.handle_config_upload()
         goal_text, eval_text, num_steps = self.handle_user_inputs()
         if st.button("Run AIDE", type="primary", use_container_width=True):
+            if uploaded_files == [] and "cfg" not in st.session_state:
+                st.error("Please upload data files or provide a configuration file.")
+                return
             with st.spinner("AIDE is running..."):
                 results = self.run_aide(
                     uploaded_files, goal_text, eval_text, num_steps, results_col
                 )
                 st.session_state.results = results
+
+    def handle_config_upload(self):
+        """
+        Handle the upload of a configuration file.
+
+        Returns:
+            str: The configuration file path.
+        """
+
+        def on_config_change():
+            # Update session state when config changes
+            if st.session_state.config_uploader:
+                st.session_state.pop("example_files", None)
+                st.session_state.config_file = st.session_state.config_uploader
+                # Load the configuration using load_cfg
+                try:
+                    cfg = load_cfg(st.session_state.config_file)
+                    # Store config object in session state
+                    st.session_state.cfg = cfg
+                    st.session_state.data_files = self.load_data_files()
+                    # Update session state with values from config
+                    st.session_state.goal = getattr(cfg, "goal", "")
+                    st.session_state.eval = getattr(cfg, "eval", "")
+                except Exception as e:
+                    st.error(f"Error loading configuration: {str(e)}")
+                    st.session_state.pop("config_file", None)
+                    st.session_state.pop("cfg", None)  # Also pop cfg on error
+            else:
+                # Clear config file and related data from session state when removed
+                st.session_state.pop("config_file", None)
+                st.session_state.pop("cfg", None)  # Also pop cfg on error
+                st.session_state.pop("goal", None)
+                st.session_state.pop("eval", None)
+                st.session_state.pop("example_files", None)
+                st.session_state.pop("data_files", None)
+
+        st.file_uploader(
+            "Upload Configuration File",
+            type=["yaml", "yml"],
+            key="config_uploader",
+            on_change=on_config_change,
+        )
+
+        if st.session_state.get("cfg"):
+            st.info("Data files loaded! Click 'Run AIDE' to proceed.")
+            with st.expander("View Loaded Files", expanded=False):
+                for file in st.session_state.data_files:
+                    st.text(f"📄 {file['name']}")
 
     def handle_file_upload(self):
         """
@@ -156,8 +230,10 @@ class WebUI:
         Returns:
             list: List of uploaded or example files.
         """
-        # Only show file uploader if no example files are loaded
-        if not st.session_state.get("example_files"):
+        # Show file uploader if no example files are loaded and no config file is present
+        if not st.session_state.get("example_files") and not st.session_state.get(
+            "config_file"
+        ):
             uploaded_files = st.file_uploader(
                 "Upload Data Files",
                 accept_multiple_files=True,
@@ -193,33 +269,70 @@ class WebUI:
         Returns:
             tuple: Goal text, evaluation criteria text, and number of steps.
         """
-        goal_text = st.text_area(
-            "Goal",
-            value=st.session_state.get("goal", ""),
-            placeholder="Example: Predict the sales price for each house",
-        )
-        eval_text = st.text_area(
-            "Evaluation Criteria",
-            value=st.session_state.get("eval", ""),
-            placeholder="Example: Use the RMSE metric between the logarithm of the predicted and observed values.",
-        )
-        num_steps = st.slider(
-            "Number of Steps",
-            min_value=1,
-            max_value=20,
-            value=st.session_state.get("steps", 10),
-        )
+        has_desc_file = False
+        num_steps = None
+
+        if st.session_state.get("cfg"):
+            has_desc_file = getattr(st.session_state.cfg, "desc_file", None) is not None
+            if has_desc_file:
+                st.info(
+                    "Ignoring Goal and Eval inputs because task description file is provided in config."
+                )
+                goal_text = None
+                eval_text = None
+            # Store num_steps in session state if available in config
+            if hasattr(st.session_state.cfg.agent, "steps"):
+                st.session_state["steps"] = st.session_state.cfg.agent.steps
+                num_steps = st.session_state.cfg.agent.steps
+
+        if not has_desc_file:
+            goal_text = st.text_area(
+                "Goal",
+                value=st.session_state.get("goal"),
+                placeholder="Example: Predict the sales price for each house",
+                key="goal",
+            )
+            eval_text = st.text_area(
+                "Evaluation Criteria",
+                value=st.session_state.get("eval"),
+                placeholder="Example: Use the RMSE metric between the logarithm of the predicted and observed values.",
+                key="eval",
+            )
+
+        # Show steps slider in autopilot mode with value from config/session state
+        if st.session_state.get("mode") == "autopilot":
+            num_steps = st.slider(
+                "Number of Steps",
+                min_value=1,
+                max_value=20,
+                value=st.session_state.get("steps", 10),
+            )
+        elif st.session_state.get("mode") == "copilot":
+            num_steps = 1  # Default value for copilot mode
+
         return goal_text, eval_text, num_steps
+
+    def load_data_files(self):
+        if not st.session_state.cfg.data_dir.exists():
+            st.error(f"Data directory not found at: {st.session_state.cfg.data_dir}")
+            return []
+        data_files = []
+        for file_path in st.session_state.cfg.data_dir.glob("*"):
+            if file_path.suffix.lower() in [".csv", ".txt", ".json", ".md"]:
+                data_files.append({"name": file_path.name, "path": file_path})
+        if not data_files:
+            st.warning("No data files found in the data directory")
+        return data_files
 
     @staticmethod
     def load_example_files():
         """
-        Load example files from the 'example_tasks/house_prices' directory.
+        Load example files from the 'example_tasks/house_prices' directory.)
 
         Returns:
             list: List of example files with their paths.
         """
-        package_root = Path(__file__).parent.parent
+        package_root = Path(__file__).parent.parent.parent
         example_dir = package_root / "example_tasks" / "house_prices"
 
         if not example_dir.exists():
@@ -265,52 +378,55 @@ class WebUI:
         try:
             self.initialize_run_state(num_steps)
             self.set_api_keys()
-
-            input_dir = self.prepare_input_directory(files)
+            
+            input_dir = (
+                self.prepare_input_directory(files)
+                if files and "cfg" not in st.session_state
+                else st.session_state.cfg.data_dir
+            )
             if not input_dir:
                 return None
 
-            experiment = self.initialize_experiment(input_dir, goal_text, eval_text)
+            workflow = self.initialize_workflow(input_dir, goal_text, eval_text, num_steps, results_col)
 
-            # Create separate placeholders for progress and config
-            progress_placeholder = results_col.empty()
-            config_placeholder = results_col.empty()
-            results_placeholder = results_col.empty()
+            asyncio.run(workflow.run())
+            
+            #experiment = self.initialize_experiment(input_dir, goal_text, eval_text)
 
-            for step in range(num_steps):
-                st.session_state.current_step = step + 1
-                progress = (step + 1) / num_steps
+            # for step in range(num_steps):
+            #     st.session_state.current_step = step + 1
+            #     progress = (step + 1) / num_steps
 
-                # Update progress
-                with progress_placeholder.container():
-                    st.markdown(
-                        f"### 🔥 Running Step {st.session_state.current_step}/{st.session_state.total_steps}"
-                    )
-                    st.progress(progress)
+            #     # Update progress
+            #     with progress_placeholder.container():
+            #         st.markdown(
+            #             f"### 🔥 Running Step {st.session_state.current_step}/{st.session_state.total_steps}"
+            #         )
+            #         st.progress(progress)
 
-                # Show config only for first step
-                if step == 0:
-                    with config_placeholder.container():
-                        st.markdown("### 📋 Configuration")
-                        st.code(OmegaConf.to_yaml(experiment.cfg), language="yaml")
+            #     # Show config only for first step
+            #     if step == 0:
+            #         with config_placeholder.container():
+            #             st.markdown("### 📋 Configuration")
+            #             st.code(OmegaConf.to_yaml(experiment.cfg), language="yaml")
 
-                experiment.run(steps=1)
+            #     experiment.run(steps=1)
 
-                # Show results
-                with results_placeholder.container():
-                    self.render_live_results(experiment)
+            #     # Show results
+            #     with results_placeholder.container():
+            #         self.render_live_results(experiment)
 
-                # Clear config after first step
-                if step == 0:
-                    config_placeholder.empty()
+            #     # Clear config after first step
+            #     if step == 0:
+            #         config_placeholder.empty()
 
-            # Clear progress after all steps
-            progress_placeholder.empty()
+            # # Clear progress after all steps
+            # progress_placeholder.empty()
 
-            # Update session state
-            st.session_state.is_running = False
-            st.session_state.results = self.collect_results(experiment)
-            return st.session_state.results
+            # # Update session state
+            # st.session_state.is_running = False
+            # st.session_state.results = self.collect_results(experiment)
+            # return st.session_state.results
 
         except Exception as e:
             st.session_state.is_running = False
@@ -327,9 +443,15 @@ class WebUI:
             num_steps (int): Total number of steps in the experiment.
         """
         st.session_state.is_running = True
-        st.session_state.current_step = 0
-        st.session_state.total_steps = num_steps
-        st.session_state.progress = 0
+        if st.session_state.get("mode") == "autopilot":
+            st.session_state.current_step = 0
+            st.session_state.total_steps = num_steps
+            st.session_state.progress = 0
+
+        if st.session_state.get("mode") == "copilot":
+            st.session_state.current_step = 1
+            st.session_state.total_steps = num_steps
+            st.session_state.progress = 1
 
     @staticmethod
     def set_api_keys():
@@ -366,6 +488,78 @@ class WebUI:
             return None
         return input_dir
 
+    def initialize_workflow(self, input_dir, goal_text, eval_text, num_steps, results_col): 
+        """
+        Initialize the AIDE Workflow.
+
+        Args:
+            input_dir (Path): Path to the input directory.
+            goal_text (str): The goal of the experiment.
+            eval_text (str): The evaluation criteria.
+
+        Returns:
+            Workflow: The initialized Workflow object.
+        """
+        try: 
+            cfg = st.session_state.get("cfg")
+            if cfg.agent.steps != num_steps:
+                cfg.agent.steps = num_steps
+        except: 
+            cfg = _load_cfg(use_cli_args=False)
+            cfg.data_dir = input_dir
+            cfg.goal = goal_text
+            cfg.eval = eval_text
+            cfg = prep_cfg(cfg)
+            cfg.agent.steps = num_steps
+        
+        if st.session_state.get("mode") == "autopilot":
+            workflow = AutoPilot(cfg)
+            
+            # Create separate placeholders for progress and config
+            progress_placeholder = results_col.empty()
+            config_placeholder = results_col.empty()
+            results_placeholder = results_col.empty()
+            
+            def update_display(*args, **kwargs):
+                if st.session_state.current_step < st.session_state.total_steps:
+                    st.session_state.current_step = len(workflow.journal) + 1
+                
+                if len(workflow.journal) < workflow.cfg.agent.steps:
+                    progress = (len(workflow.journal) + 1) / workflow.cfg.agent.steps
+                else:
+                    progress = 1.0
+
+                # Update progress
+                with progress_placeholder.container():
+                    st.markdown(
+                        f"### 🔥 Running Step {st.session_state.current_step}/{st.session_state.total_steps}"
+                    )
+                    st.progress(progress)
+                
+                if len(workflow.journal) == 0:
+                    with config_placeholder.container():
+                        st.session_state.config_container_active = True
+                        st.markdown("### 📋 Configuration")
+                        st.code(OmegaConf.to_yaml(workflow.cfg), language="yaml")
+                        
+                if len(workflow.journal) > 0 and st.session_state.config_container_active:
+                    config_placeholder.empty()
+                    st.session_state.config_container_active = False
+                
+                # Show results
+                if len(workflow.journal) > 0 and not st.session_state.config_container_active:
+                    with results_placeholder.container():
+                        self.render_live_results(workflow)
+
+                
+            workflow.callback_manager.register_callback("tool_output", update_display)
+            asyncio.run(workflow.callback_manager.execute_callback("tool_output"))
+        
+        elif st.session_state.get("mode") == "copilot":
+            workflow = CoPilot(cfg)
+        
+        return workflow
+
     @staticmethod
     def initialize_experiment(input_dir, goal_text, eval_text):
         """
@@ -383,17 +577,17 @@ class WebUI:
         return experiment
 
     @staticmethod
-    def collect_results(experiment):
+    def collect_results(workflow):
         """
-        Collect the results from the experiment.
+        Collect the results from the running workflow.
 
         Args:
-            experiment (Experiment): The Experiment object.
+            workflow (Workflow -> Autopilot/Copilot): The Workflow object.
 
         Returns:
             dict: Dictionary containing the collected results.
         """
-        solution_path = experiment.cfg.log_dir / "best_solution.py"
+        solution_path = workflow.cfg.log_dir / "best_solution.py"
         if solution_path.exists():
             solution = solution_path.read_text()
         else:
@@ -406,14 +600,14 @@ class WebUI:
                 "metric": str(node.metric.value) if node.metric else None,
                 "is_buggy": node.is_buggy,
             }
-            for node in experiment.journal.nodes
+            for node in workflow.journal.nodes
         ]
 
         results = {
             "solution": solution,
-            "config": OmegaConf.to_yaml(experiment.cfg),
+            "config": OmegaConf.to_yaml(workflow.cfg),
             "journal": json.dumps(journal_data, indent=2, default=str),
-            "tree_path": str(experiment.cfg.log_dir / "tree_plot.html"),
+            "tree_path": str(workflow.cfg.log_dir / "tree_plot.html"),
         }
         return results
 
@@ -559,14 +753,14 @@ class WebUI:
         except (json.JSONDecodeError, KeyError):
             st.error("Could not parse validation metrics data")
 
-    def render_live_results(self, experiment):
+    def render_live_results(self, workflow):
         """
         Render live results.
 
         Args:
-            experiment (Experiment): The Experiment object
+            workflow (Workflow): The Workflow object
         """
-        results = self.collect_results(experiment)
+        results = self.collect_results(workflow)
 
         # Create tabs for different result views
         tabs = st.tabs(

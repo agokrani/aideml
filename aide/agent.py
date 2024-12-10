@@ -471,7 +471,7 @@ class Agent:
                 "exec", result_node.code, True
             )
 
-        result_node = self.parse_exec_result(
+        result_node = await self.parse_exec_result(
             node=result_node,
             exec_result=exec_result,
             exec_callback=exec_callback,
@@ -604,8 +604,8 @@ class Agent:
         node.is_buggy = (
             response.is_bug
             or node.exc_type is not None
-            or response["metric"] is None
-            or not response["has_csv_submission"]
+            or response.metric is None
+            or not response.has_csv_submission
             or not has_csv_submission
         )
 

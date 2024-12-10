@@ -18,24 +18,11 @@ logger = logging.getLogger("aide")
 class CoPilot(Workflow):
     def __init__(
         self,
-        agent: Agent,
-        interpreter: Interpreter,
         cfg: Config,
         callback_manager: CallbackManager | None = None,
     ):
-        self.agent = agent
-        self.cfg = cfg
-        self.interpreter = interpreter
-        self.journal = agent.journal
-        self.callback_manager = (
-            callback_manager if callback_manager is not None else CallbackManager()
-        )
-
-        try:
-            self.callback_manager.callbacks["exec"]
-        except KeyError:
-            self.callback_manager.register_callback("exec", self.interpreter.run)
-
+        super().__init__(cfg, callback_manager)
+        
     async def run(self):
 
         action_agent = ActionAgent(self.agent.task_desc, self.cfg)

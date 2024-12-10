@@ -18,15 +18,9 @@ from rich.padding import Padding
 from rich.columns import Columns
 from rich.console import Group
 from rich.panel import Panel
-from omegaconf import OmegaConf
-from aide import backend
-from aide.agent import Agent
 from aide.callbacks.manager import CallbackManager
-from aide.interpreter import Interpreter
-from aide.journal import Journal
 from aide.run import VerboseFilter, journal_to_rich_tree
-from aide.utils.config import load_cfg, load_task_desc, prep_agent_workspace
-from aide.utils.serialize import load_code_file, load_json
+from aide.utils.config import load_cfg
 from aide.workflow.autopilot import AutoPilot
 from aide.workflow.copilot import CoPilot
 from aide.callbacks.stdout import handle_exit, read_input, execute_code
@@ -84,49 +78,13 @@ def start(mode, config_path=None):
     logger.addHandler(file_handler)
     logger.addHandler(verbose_file_handler)
 
-    task_desc = load_task_desc(cfg)
-    task_desc_str = backend.compile_prompt_to_md(task_desc)
-
-    prep_agent_workspace(cfg)
-
-    journal = Journal()
     logger.info(f'Starting run "{cfg.exp_name}"')
-
-    agent = Agent(
-        task_desc=task_desc_str,
-        cfg=cfg,
-        journal=journal,
-    )
-
-    interpreter = Interpreter(
-        cfg.workspace_dir, **OmegaConf.to_container(cfg.exec)  # type: ignore
-    )
-
-    if cfg.initial_solution.exp_name is not None:
-        journal_json = (
-            cfg.log_dir.parent / cfg.initial_solution.exp_name / "journal.json"
-        ).resolve()
-        prev_journal = load_json(journal_json, Journal)
-        if cfg.initial_solution.node_id is not None:
-            node = prev_journal.get(cfg.initial_solution.node_id)
-        else:
-            node = prev_journal.get_best_node()
-        if node is not None:
-            agent.journal.append(node)
-    elif cfg.initial_solution.code_file is not None:
-        assert (
-            cfg.initial_solution.node_id is None
-            and cfg.initial_solution.exp_name is None
-        ), "Please specify either code_file or a combination of exp_name and node_id. Specifying both is not allowed."
-        node = load_code_file(cfg.initial_solution.code_file)
-        if node:
-            # TODO: Remove this from here once the proper place to set load this file has been identified
-            exec_result = interpreter.run(code=node.code)
-            agent.parse_exec_result(node=node, exec_result=exec_result, max_attempts=0)
-            agent.journal.append(node)
 
     if mode == "autopilot":
         console.print("Starting autopilot run...\n")
+        
+        callback_manager = CallbackManager()
+        autopilot = AutoPilot(cfg, callback_manager)
 
         progress = Progress(
             TextColumn("[progress.description]{task.description}"),
@@ -138,8 +96,8 @@ def start(mode, config_path=None):
         status = Status("[green]Setting up...")
 
         def generate_display():
-            tree = journal_to_rich_tree(agent.journal)
-            progress.update(task_id, completed=len(agent.journal))
+            tree = journal_to_rich_tree(autopilot.journal)
+            progress.update(task_id, completed=len(autopilot.journal))
 
             file_paths = [
                 f"Result visualization:\n[yellow]▶ {str((cfg.log_dir / 'tree_plot.html'))}",
@@ -148,13 +106,13 @@ def start(mode, config_path=None):
             ]
 
             # Truncate the task description to a fixed number of lines
-            task_desc_lines = task_desc_str.strip().split("\n")
+            task_desc_lines = autopilot.agent.task_desc.strip().split("\n")
             max_lines = 10  # Number of lines to display
             if len(task_desc_lines) > max_lines:
                 task_desc_display = "\n".join(task_desc_lines[:max_lines])
                 task_desc_display += "..."
             else:
-                task_desc_display = task_desc_str.strip()
+                task_desc_display = autopilot.agent.task_desc.strip()
 
             left = Group(
                 Panel(Text(task_desc_display), title="Task description"),
@@ -179,7 +137,7 @@ def start(mode, config_path=None):
 
         def exec_callback(*args, **kwargs):
             status.update("[magenta]Executing code...")
-            res = interpreter.run(*args, **kwargs)
+            res = autopilot.interpreter.run(*args, **kwargs)
             return res
 
         def stage_start(stage_name, message=None):
@@ -190,12 +148,10 @@ def start(mode, config_path=None):
             else:
                 status.update(f"[green]{message}{stage_name}...[/green]")
 
-        callback_manager = CallbackManager()
-        callback_manager.register_callbacks(
+        
+        autopilot.callback_manager.register_callbacks(
             {"exec": exec_callback, "stage_start": stage_start}
         )
-
-        autopilot = AutoPilot(agent, interpreter, cfg, callback_manager)
 
         with Live(generate_display(), refresh_per_second=16, screen=True) as live:
 
@@ -207,7 +163,6 @@ def start(mode, config_path=None):
 
     elif mode == "copilot":
         console.print("Starting copilot run...\n")
-
         callback_manager = CallbackManager()
 
         def stage_start(stage_name, message=None):
@@ -231,14 +186,16 @@ def start(mode, config_path=None):
             {
                 "tool_output": console.print,
                 "user_input": read_input,
-                "exec": execute_code(interpreter),
                 "exit": handle_exit,
                 "stage_start": stage_start,
                 "stage_end": stage_end,
             }
         )
-
-        copilot = CoPilot(agent, interpreter, cfg, callback_manager)
+        copilot = CoPilot(cfg, callback_manager)
+        
+        # HACK: This is a temporary fix to get the copilot interpreter callback
+        copilot.callback_manager.register_callback("exec", execute_code(copilot.interpreter))
+        
         asyncio.run(copilot.run())
 
 
