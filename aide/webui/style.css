@@ -172,3 +172,21 @@ div[data-testid="InputInstructions"] {
     visibility: hidden;
 }
 
+/* Chat container styling */
+[data-testid="stChatMessageContent"] {
+    background-color: #f0f2f6;
+    border-radius: 10px;
+    padding: 10px;
+    margin: 5px 0;
+}
+
+/* User message styling */
+[data-testid="stChatMessage"][data-role="user"] [data-testid="stChatMessageContent"] {
+    background-color: #e3f2fd;
+}
+
+/* Assistant message styling */
+[data-testid="stChatMessage"][data-role="assistant"] [data-testid="stChatMessageContent"] {
+    background-color: #f5f5f5;
+}
+

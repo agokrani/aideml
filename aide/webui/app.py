@@ -15,7 +15,7 @@ from aide import Experiment
 from aide.utils.config import _load_cfg, load_cfg, prep_cfg
 from aide.workflow.autopilot import AutoPilot
 from aide.workflow.copilot import CoPilot
-
+from streamlit_float import *
 # Set up logging configuration
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +27,6 @@ logger = logging.getLogger("aide")
 logger.setLevel(logging.INFO)
 
 console = Console(file=sys.stderr)
-
 
 class WebUI:
     """
@@ -76,6 +75,8 @@ class WebUI:
             st.session_state.mode = "autopilot"
         if "config_container_active" not in st.session_state:
             st.session_state.config_container_active = False
+        if "run_started" not in st.session_state:
+            st.session_state.run_started = False
 
     @staticmethod
     def setup_page():
@@ -165,15 +166,17 @@ class WebUI:
         uploaded_files = self.handle_file_upload()
         self.handle_config_upload()
         goal_text, eval_text, num_steps = self.handle_user_inputs()
+        
         if st.button("Run AIDE", type="primary", use_container_width=True):
             if uploaded_files == [] and "cfg" not in st.session_state:
                 st.error("Please upload data files or provide a configuration file.")
                 return
+            
             with st.spinner("AIDE is running..."):
                 results = self.run_aide(
                     uploaded_files, goal_text, eval_text, num_steps, results_col
                 )
-                st.session_state.results = results
+            st.session_state.results = results
 
     def handle_config_upload(self):
         """
@@ -388,9 +391,9 @@ class WebUI:
                 return None
 
             workflow = self.initialize_workflow(input_dir, goal_text, eval_text, num_steps, results_col)
-
-            asyncio.run(workflow.run())
             
+            asyncio.run(workflow.run())
+
             #experiment = self.initialize_experiment(input_dir, goal_text, eval_text)
 
             # for step in range(num_steps):
@@ -557,7 +560,11 @@ class WebUI:
         
         elif st.session_state.get("mode") == "copilot":
             workflow = CoPilot(cfg)
-        
+            # Create separate placeholders for progress and config
+            results_placeholder = results_col.empty()
+            with results_placeholder.container():
+               self.render_live_results(workflow)
+            
         return workflow
 
     @staticmethod
@@ -752,6 +759,48 @@ class WebUI:
 
         except (json.JSONDecodeError, KeyError):
             st.error("Could not parse validation metrics data")
+    
+    @staticmethod
+    def render_chat():
+        """Render chat interface with fixed height and persistent input."""
+        
+        if "chat_history" not in st.session_state: 
+            st.session_state['chat_history'] = []
+                
+        #Create a container with fixed height for messages with dark styling
+        with st.markdown('''
+            <div style="
+                height: 534px; 
+                overflow-y: auto;
+                background-color: #2b2d31;
+                border: 1px solid #1e1f22;
+                border-radius: 10px;
+                padding: 20px;
+                margin-bottom: 10px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            ">
+        ''', unsafe_allow_html=True):
+
+            chat_container = st.container()
+        # Display existing chat messages
+            with chat_container:
+                for message in st.session_state.chat_history:
+                    with st.chat_message(message["role"]):
+                        st.write(message["content"])
+
+        # Chat input - placing it outside the container but still within the tab
+        if prompt := st.chat_input():
+            # Add user message
+            with st.chat_message("user"):
+                st.write(prompt)
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            
+            # Add assistant response (placeholder - replace with actual assistant logic)
+            with st.chat_message("assistant"):
+                response = f"Echo: {prompt}"
+                st.write(response)
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
+
 
     def render_live_results(self, workflow):
         """
@@ -762,31 +811,47 @@ class WebUI:
         """
         results = self.collect_results(workflow)
 
+        # Store the active tab in session state if not already present
+        if "active_tab" not in st.session_state:
+            st.session_state.active_tab = 0
+
         # Create tabs for different result views
-        tabs = st.tabs(
-            [
-                "Tree Visualization",
-                "Best Solution",
-                "Config",
-                "Journal",
-                "Validation Plot",
-            ]
+        tab_names = (
+            ["Chat", "Tree Visualization", "Best Solution", "Config", "Journal", "Validation Plot"]
+            if st.session_state.get("mode") == "copilot"
+            else ["Tree Visualization", "Best Solution", "Config", "Journal", "Validation Plot"]
         )
+        
+        # Create tabs and update active tab index
+        tabs = st.tabs(tab_names)
+        
+        # Store tab rendering functions in a dictionary
+        tab_mapping = {
+            # Store tab rendering functions in a dictionary
+            "Chat": self.render_chat,
+            "Tree Visualization": self.render_tree_visualization,
+            "Best Solution": self.render_best_solution,
+            "Config": self.render_config,
+            "Journal": self.render_journal,
+            "Validation Plot": lambda results: (
+                st.metric("Best Validation Score", f"{self.get_best_metric(results):.4f}")
+                if self.get_best_metric(results) is not None
+                else None,
+                self.render_validation_plot(results, step=st.session_state.current_step),
+            ),
+        }
 
-        with tabs[0]:
-            self.render_tree_visualization(results)
-        with tabs[1]:
-            self.render_best_solution(results)
-        with tabs[2]:
-            self.render_config(results)
-        with tabs[3]:
-            self.render_journal(results)
-        with tabs[4]:
-            best_metric = self.get_best_metric(results)
-            if best_metric is not None:
-                st.metric("Best Validation Score", f"{best_metric:.4f}")
-            self.render_validation_plot(results, step=st.session_state.current_step)
-
+        # Render content for each tab
+        for tab_idx, (tab, tab_name) in enumerate(zip(tabs, tab_names)):
+            with tab:
+                # Create a container for the tab content
+                tab_container = st.container()
+                with tab_container:
+                    if tab_name in tab_mapping:
+                        if tab_name == "Chat":
+                            tab_mapping[tab_name]()
+                        else:
+                            tab_mapping[tab_name](results)
 
 if __name__ == "__main__":
     app = WebUI()
