@@ -35,7 +35,8 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "aide = aide.run:run",
+            "aide = aide.run:main",
+            "aide-cli = aide.cli:cli",
         ],
     },
 )

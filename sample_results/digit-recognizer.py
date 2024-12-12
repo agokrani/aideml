@@ -1,12 +1,10 @@
 import pandas as pd
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
-from torchvision import transforms
 
 # Load the data
 train_df = pd.read_csv("./input/train.csv")

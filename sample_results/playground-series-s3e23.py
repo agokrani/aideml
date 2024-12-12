@@ -4,7 +4,6 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import roc_auc_score
 from sklearn.feature_selection import RFECV
 import lightgbm as lgb
-from bayes_opt import BayesianOptimization
 
 # Load the data
 train_data = pd.read_csv("./input/train.csv")

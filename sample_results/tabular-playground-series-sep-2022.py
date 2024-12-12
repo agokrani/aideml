@@ -1,7 +1,6 @@
 import pandas as pd
 import lightgbm as lgb
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error
 from sklearn.preprocessing import OneHotEncoder
 import numpy as np
 

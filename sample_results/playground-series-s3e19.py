@@ -1,5 +1,5 @@
 import pandas as pd
-from catboost import CatBoostRegressor, Pool
+from catboost import CatBoostRegressor
 from sklearn.model_selection import KFold
 import numpy as np
 from sklearn.preprocessing import LabelEncoder

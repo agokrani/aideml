@@ -1,7 +1,7 @@
 from typing import List
 
 
-def install_missing_libraries(missing_libraries: List[str]): 
+def install_missing_libraries(missing_libraries: List[str]):
     """
     Installs the missing libraries using pip.
 

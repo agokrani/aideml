@@ -1,6 +1,6 @@
 import pandas as pd
 import lightgbm as lgb
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from bayes_opt import BayesianOptimization

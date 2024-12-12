@@ -1,4 +1,5 @@
-from aide.actions.action import *
+from typing import BaseModel
+from aide.actions.action import Draft, Improve, Debug, Finish, SubmitReview
 
 action_name_to_action = {
     "Draft": Draft,

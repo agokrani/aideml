@@ -1,7 +1,5 @@
 from dataclasses import dataclass
-from .version import __version__
-from .backend import compile_prompt_to_md
-
+from .version import __version__ as __version__
 from .agent import Agent
 from .interpreter import Interpreter
 from .journal import Journal
@@ -14,7 +12,6 @@ from .utils.config import (
     _load_cfg,
     prep_cfg,
 )
-from pathlib import Path
 
 
 @dataclass

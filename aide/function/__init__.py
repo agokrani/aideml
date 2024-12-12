@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from aide.function.search import *
+from aide.function.search import search_arxiv, search_papers_with_code
 
 func_name_to_func = {
     "SearchArxiv": search_arxiv,

@@ -99,8 +99,11 @@ async def run():
         "--config-path", type=str, help="Path to the configuration file"
     )
     args, _ = parser.parse_known_args()
+    if args.config_path:
+        cfg = load_cfg(args.config_path)
+    else:
+        cfg = load_cfg(use_cli_args=True)
 
-    cfg = load_cfg(args.config_path)
     log_format = "[%(asctime)s] %(levelname)s: %(message)s"
     logging.basicConfig(
         level=getattr(logging, cfg.log_level.upper()), format=log_format, handlers=[]
@@ -243,5 +246,10 @@ async def run():
         print("Report written to file:", report_file_path)
 
 
-if __name__ == "__main__":
+def main():
+    """Wrapper function to run the async code"""
     asyncio.run(run())
+
+
+if __name__ == "__main__":
+    main()

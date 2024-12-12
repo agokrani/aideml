@@ -3,7 +3,6 @@ import lightgbm as lgb
 from sklearn.model_selection import RandomizedSearchCV, KFold
 from sklearn.metrics import log_loss, make_scorer
 from sklearn.preprocessing import LabelEncoder
-import numpy as np
 
 # Load the data
 train_data = pd.read_csv("./input/train.csv")

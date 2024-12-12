@@ -1,4 +1,3 @@
-import os
 from xml.etree import ElementTree
 import requests
 
@@ -34,7 +33,7 @@ def search_arxiv(query, max_results=8):
 
 
 def search_papers_with_code(query: str, max_results: int = 8) -> str:
-    url = f"https://paperswithcode.com/api/v1/search/"
+    url = "https://paperswithcode.com/api/v1/search/"
     response = requests.get(url, params={"page": 1, "q": query})
     if response.status_code != 200:
         return "Failed to retrieve data from Papers With Code."

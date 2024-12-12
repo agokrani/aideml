@@ -1,8 +1,7 @@
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import cross_val_score, KFold, GridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import make_scorer
-from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer

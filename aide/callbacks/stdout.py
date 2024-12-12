@@ -39,7 +39,7 @@ def execute_code(interpreter: Interpreter):
             spinner, refresh_per_second=4
         ) as live:  # Adjust refresh rate as needed
             result = interpreter.run(*args, **kwargs)
-            live.update(f"[bold red]Done Executing the code[/bold red]")
+            live.update("[bold red]Done Executing the code[/bold red]")
         return result
 
     return callback

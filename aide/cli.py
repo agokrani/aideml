@@ -117,7 +117,7 @@ def start(mode, config_path=None):
         assert (
             cfg.initial_solution.node_id is None
             and cfg.initial_solution.exp_name is None
-        ), f"Please specify either code_file or a combination of exp_name and node_id. Specifying both is not allowed."
+        ), "Please specify either code_file or a combination of exp_name and node_id. Specifying both is not allowed."
         node = load_code_file(cfg.initial_solution.code_file)
         if node:
             # TODO: Remove this from here once the proper place to set load this file has been identified

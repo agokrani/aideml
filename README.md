@@ -6,6 +6,15 @@
 [![Discord](https://dcbadge.vercel.app/api/server/Rq7t8wnsuA?compact=true&style=flat)](https://discord.gg/Rq7t8wnsuA)&ensp;
 [![Twitter Follow](https://img.shields.io/twitter/follow/WecoAI?style=social)](https://twitter.com/WecoAI)&ensp;
 
+---
+
+> **⚠️ Note:** This is a **fork** of the original AIDE project, introducing **Copilot Mode** via the CLI. The Copilot Mode allows you to interact with AIDE in a more collaborative way directly from your terminal.  
+> **Currently, Copilot Mode is not supported in the Web UI, but a better UI is coming soon!**  
+> This fork remains **compatible** with the original AIDE repository, but **Copilot Mode is unavailable** when running the original version.
+
+---
+
+
 AIDE is an LLM agent that generates solutions for machine learning tasks just from natural language descriptions of the task.
 
 AIDE is the state-of-the-art agent on OpenAI's [MLE-bench](https://arxiv.org/pdf/2410.07095), a benchmark composed of 75 Kaggle machine learning tasks, where we achieved four times more medals compared to the runner-up agent architecture.
@@ -94,29 +103,36 @@ export OPENAI_API_KEY=<your API key>
 export ANTHROPIC_API_KEY=<your API key>
 ```
 
-To run AIDE:
+AIDE now supports two modes of operation:
+- **Autopilot Mode**: Fully autonomous operation where AIDE works independently
+- **Copilot Mode**: Interactive mode where you can collaborate with AIDE
+
+To run AIDE, use the following command:
 
 ```bash
-aide data_dir="<path to your data directory>" goal="<describe the agent's goal for your task>" eval="<(optional) describe the evaluation metric the agent should use>"
+aide-cli start [autopilot|copilot] --config-path <path to config file>
 ```
 
-For example, to run AIDE on the example [house price prediction task](https://www.kaggle.com/competitions/house-prices-advanced-regression-techniques/data):
+For example, to run AIDE in autopilot mode with a configuration file:
 
 ```bash
-aide data_dir="example_tasks/house_prices" goal="Predict the sales price for each house" eval="Use the RMSE metric between the logarithm of the predicted and observed values."
+aide-cli start autopilot --config-path configs/config.yaml
 ```
 
-Options:
-
-- `data_dir` (required): A directory containing all the data relevant for your task (`.csv` files, images, etc.).
-- `goal`: Describe what you want the models to predict in your task, for example, "Build a time series forecasting model for bitcoin close price" or "Predict sales price for houses".
-- `eval`: The evaluation metric used to evaluate the ML models for the task (e.g., accuracy, F1, Root-Mean-Squared-Error, etc.).
-
-Alternatively, you can provide the entire task description as a `desc_str` string, or write it in a plaintext file and pass its path as `desc_file` ([example file](aide/example_tasks/house_prices.md)).
+Or for interactive copilot mode:
 
 ```bash
-aide data_dir="my_data_dir" desc_file="my_task_description.txt"
+aide-cli start copilot --config-path configs/config.yaml
 ```
+
+The configuration file should contain all the necessary settings including:
+- Data directory path
+- Task description and goals
+- Evaluation metrics
+- Model settings
+- Number of steps
+
+> **Note:** While this fork remains compatible with the original AIDE repository's functionality, Copilot Mode is only available when using this forked version. If you run AIDE from the original repository, you'll only have access to the autopilot functionality. The autopilot mode with aide-cli is the same as the original aide command. However, if you use the aide-cli command, all arguments must be provided via a config file.
 
 The result of the run will be stored in the `logs` directory.
 
@@ -184,7 +200,7 @@ print(f"Best solution code: {best_solution.code}")
 To install AIDE for development, clone this repository and install it locally:
 
 ```bash
-git clone https://github.com/WecoAI/aideml.git
+git clone https://github.com/agokrani/aideml.git
 cd aideml
 pip install -e .
 ```
