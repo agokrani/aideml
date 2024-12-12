@@ -3,8 +3,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)&ensp;
 [![PyPI](https://img.shields.io/pypi/v/aideml?color=blue)](https://pypi.org/project/aideml/)&ensp;
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
+<!--
 [![Discord](https://dcbadge.vercel.app/api/server/Rq7t8wnsuA?compact=true&style=flat)](https://discord.gg/Rq7t8wnsuA)&ensp;
 [![Twitter Follow](https://img.shields.io/twitter/follow/WecoAI?style=social)](https://twitter.com/WecoAI)&ensp;
+-->
 
 ---
 
