@@ -181,11 +181,7 @@ class CoPilot(Workflow):
             submission_exists = False
             if not current_node.is_buggy:
                 if isinstance(self.interpreter, Runtime) and hasattr(self.interpreter, "has_submission"):
-                    submission_exists = self.interpreter.has_submission()
-                elif not (
-                    self.cfg.workspace_dir / "submission" / "submission.csv"
-                ).exists():
-                    submission_exists = False
+                    submission_exists = await self.callback_manager.execute_callback("has_submission")
                 else:
                     submission_exists = True
 
