@@ -178,22 +178,18 @@ class CoPilot(Workflow):
 
             await self.callback_manager.execute_callback("tool_output", message)
 
-            # TODO: Fix this to check submission when using modal. Also verify the cache_best_node function
+            submission_exists = False
             if not current_node.is_buggy:
                 if isinstance(self.interpreter, Runtime) and hasattr(self.interpreter, "has_submission"):
-                    if not self.interpreter.has_submission():
-                        current_node.is_buggy = True
-                        current_node.metric = WorstMetricValue()
-                        logger.info(
-                            f"Actually, node {current_node.id} did not produce a submission.csv"
-                        )
-                        await self.callback_manager.execute_callback(
-                            "tool_output",
-                            f"Actually, node {current_node.id} did not produce a submission.csv",
-                        )
+                    submission_exists = self.interpreter.has_submission()
                 elif not (
                     self.cfg.workspace_dir / "submission" / "submission.csv"
                 ).exists():
+                    submission_exists = False
+                else:
+                    submission_exists = True
+
+                if not submission_exists:
                     current_node.is_buggy = True
                     current_node.metric = WorstMetricValue()
                     logger.info(
