@@ -180,7 +180,7 @@ class CoPilot(Workflow):
 
             submission_exists = False
             if not current_node.is_buggy:
-                if isinstance(self.interpreter, Runtime) and hasattr(self.interpreter, "has_submission"):
+                if self.cfg.exec.use_modal:
                     submission_exists = await self.callback_manager.execute_callback("has_submission")
                 else:
                     submission_exists = True
