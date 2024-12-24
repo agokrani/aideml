@@ -10,6 +10,7 @@ The journal is the core datastructure in AIDE that contains:
 import copy
 import time
 import uuid
+import shutil
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 
@@ -17,7 +18,7 @@ from dataclasses_json import DataClassJsonMixin
 from .interpreter import ExecutionResult
 from .utils.metric import MetricValue
 from .utils.response import trim_long_string
-
+from pathlib import Path
 
 @dataclass(eq=False)
 class Node(DataClassJsonMixin):
@@ -265,3 +266,29 @@ def filter_journal(journal: Journal) -> Journal:
         filtered_journal = filter_for_longest_path(journal)
 
     return filtered_journal
+
+
+def cache_best_node(node: Node, workspace_dir: Path | str, use_modal=False):
+    """Cache the best node's submission and solution files."""
+
+    # Create best solution directory
+    best_solution_dir = workspace_dir / "best_solution"
+    best_solution_dir.mkdir(exist_ok=True, parents=True)
+
+    # Create best submission directory 
+    best_submission_dir = workspace_dir / "best_submission"
+    best_submission_dir.mkdir(exist_ok=True, parents=True)
+
+    # Copy submission file
+    shutil.copy(
+        workspace_dir / "submission" / "submission.csv",
+        best_submission_dir,
+    )
+
+    # Save solution code
+    with open(best_solution_dir / "solution.py", "w") as f:
+        f.write(node.code)
+
+    # Save node ID
+    with open(best_solution_dir / "node_id.txt", "w") as f:
+        f.write(str(node.id))

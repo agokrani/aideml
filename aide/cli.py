@@ -25,6 +25,8 @@ from aide.callbacks.manager import CallbackManager
 from aide.interpreter import Interpreter
 from aide.journal import Journal
 from aide.run import VerboseFilter, journal_to_rich_tree
+from aide.runtime import get_runtime
+from aide.runtime.modal import ModalRuntime
 from aide.utils.config import load_cfg, load_task_desc, prep_agent_workspace
 from aide.utils.serialize import load_code_file, load_json
 from aide.workflow.autopilot import AutoPilot
@@ -87,8 +89,28 @@ def start(mode, config_path=None):
     task_desc = load_task_desc(cfg)
     task_desc_str = backend.compile_prompt_to_md(task_desc)
 
-    prep_agent_workspace(cfg)
 
+    def stage_start(stage_name, message=None, color="green"):
+        global live_display
+        if live_display:
+            live_display.stop()
+        if message is None:
+            final_message = f"Generating plan and code for {stage_name}..."
+        else:
+            final_message = f"{message}{stage_name}..."
+        spinner = Spinner("dots", text=f"[{color}]{final_message}[/{color}]")
+        live_display = Live(spinner, refresh_per_second=4)
+        live_display.start()
+
+    def stage_end():
+        global live_display
+        live_display.stop()
+        live_display = None
+
+    stage_start("agent workspace", "preparing ")
+    prep_agent_workspace(cfg)
+    stage_end()
+    
     journal = Journal()
     logger.info(f'Starting run "{cfg.exp_name}"')
 
@@ -97,11 +119,19 @@ def start(mode, config_path=None):
         cfg=cfg,
         journal=journal,
     )
-
-    interpreter = Interpreter(
-        cfg.workspace_dir, **OmegaConf.to_container(cfg.exec)  # type: ignore
-    )
-
+    
+    #TODO: Please setup correct runtime. 
+    # interpreter = LocalRuntime(cfg.workspace_dir, cfg.exec.timeout, cfg.exec.format_tb_ipython)
+    #interpreter = ModalRuntime(cfg.workspace_dir, cfg.exec.timeout, cfg.exec.format_tb_ipython)
+    # interpreter = Interpreter(
+    #     cfg.workspace_dir, **OmegaConf.to_container(cfg.exec)  # type: ignore
+    # )
+    
+    stage_start("runtime", "creating ")
+    interpreter = get_runtime(cfg.workspace_dir, cfg.exec, task_id=cfg.task_id, preprocess_data=cfg.preprocess_data)
+    stage_end()
+    
+   
     if cfg.initial_solution.exp_name is not None:
         journal_json = (
             cfg.log_dir.parent / cfg.initial_solution.exp_name / "journal.json"
@@ -121,10 +151,27 @@ def start(mode, config_path=None):
         node = load_code_file(cfg.initial_solution.code_file)
         if node:
             # TODO: Remove this from here once the proper place to set load this file has been identified
-            exec_result = interpreter.run(code=node.code)
-            agent.parse_exec_result(node=node, exec_result=exec_result, max_attempts=0)
+            loop = asyncio.get_event_loop()
+            
+            stage_start("initial solution", "executing ", color="magenta")
+            exec_result = loop.run_until_complete(interpreter.run(code=node.code))
+            callback_manager = None
+            if cfg.exec.use_modal:
+                callback_manager = CallbackManager()
+                assert isinstance(interpreter, ModalRuntime)
+                callback_manager.register_callback("has_submission", interpreter.has_submission)
+            node = loop.run_until_complete(
+                agent.parse_exec_result(
+                    node=node,
+                    exec_result=exec_result,
+                    max_attempts=0,
+                    callback_manager=callback_manager,
+                    use_modal=cfg.exec.use_modal
+                )
+            )
+            stage_end()
             agent.journal.append(node)
-
+            
     if mode == "autopilot":
         console.print("Starting autopilot run...\n")
 
@@ -134,12 +181,12 @@ def start(mode, config_path=None):
             MofNCompleteColumn(),
             TimeRemainingColumn(),
         )
-        task_id = progress.add_task("Progress:", total=cfg.agent.steps)
+        progress.add_task("Progress:", total=cfg.agent.steps)
         status = Status("[green]Setting up...")
 
         def generate_display():
             tree = journal_to_rich_tree(agent.journal)
-            progress.update(task_id, completed=len(agent.journal))
+            progress.update(progress.task_ids[0], completed=len(agent.journal))
 
             file_paths = [
                 f"Result visualization:\n[yellow]▶ {str((cfg.log_dir / 'tree_plot.html'))}",
@@ -210,22 +257,6 @@ def start(mode, config_path=None):
 
         callback_manager = CallbackManager()
 
-        def stage_start(stage_name, message=None):
-            global live_display
-            if live_display:
-                live_display.stop()
-            if message is None:
-                final_message = f"Generating plan and code for {stage_name}..."
-            else:
-                final_message = f"{message}{stage_name}..."
-            spinner = Spinner("dots", text=f"[green]{final_message}[/green]")
-            live_display = Live(spinner, refresh_per_second=4)
-            live_display.start()
-
-        def stage_end():
-            global live_display
-            live_display.stop()
-            live_display = None
 
         callback_manager.register_callbacks(
             {

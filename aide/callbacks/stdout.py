@@ -1,4 +1,5 @@
 import sys
+import inspect
 from rich.live import Live
 from rich.spinner import Spinner
 from aide.interpreter import Interpreter
@@ -18,8 +19,9 @@ def read_input():
     return "\n".join(lines)
 
 
-def handle_exit(message):
+async def handle_exit(message, interpreter):
     if message == "/exit":
+        await interpreter.cleanup_session()
         sys.exit()
 
 
@@ -38,7 +40,10 @@ def execute_code(interpreter: Interpreter):
         with Live(
             spinner, refresh_per_second=4
         ) as live:  # Adjust refresh rate as needed
-            result = interpreter.run(*args, **kwargs)
+            if inspect.iscoroutinefunction(interpreter.run):
+                result = await interpreter.run(*args, **kwargs)
+            else: 
+                result = interpreter.run(*args, **kwargs)
             live.update("[bold red]Done Executing the code[/bold red]")
         return result
 

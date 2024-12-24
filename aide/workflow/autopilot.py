@@ -37,4 +37,4 @@ class AutoPilot(Workflow):
             global_step = len(self.journal)
             await self.callback_manager.execute_callback("tool_output")
         # Cleanup the interpreter session
-        self.interpreter.cleanup_session()
+        await self.interpreter.cleanup_session()

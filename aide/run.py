@@ -154,7 +154,10 @@ async def run():
     )
 
     interpreter = Interpreter(
-        cfg.workspace_dir, **OmegaConf.to_container(cfg.exec)  # type: ignore
+        cfg.workspace_dir, 
+        timeout=cfg.exec.timeout,
+        format_tb_ipython=cfg.exec.format_tb_ipython,
+        agent_file_name=cfg.exec.agent_file_name
     )
 
     global_step = len(journal)
@@ -221,6 +224,7 @@ async def run():
             save_run(cfg, journal)
             global_step = len(journal)
     else:
+        import pdb;pdb.set_trace()
         with Live(
             generate_live(),
             refresh_per_second=16,

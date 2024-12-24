@@ -1,3 +1,4 @@
+import sys
 import logging
 import shutil
 import zipfile
@@ -98,3 +99,18 @@ def extract_archives(path: Path):
 def preproc_data(path: Path):
     extract_archives(path)
     clean_up_dataset(path)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print(f"Usage: python {sys.argv[0]} <path_to_data>")
+        sys.exit(1)
+
+    input_path = Path(sys.argv[1])
+    if not input_path.exists() or not input_path.is_dir():
+        print(f"Error: {input_path} does not exist or is not a directory.")
+        sys.exit(1)
+
+    print(f"Running preprocessing on {input_path}")
+    preproc_data(input_path)
+    print("Preprocessing complete.")

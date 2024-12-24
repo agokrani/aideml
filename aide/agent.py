@@ -14,6 +14,7 @@ from .utils import data_preview
 from .utils.config import Config
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import extract_code, extract_text_up_to_code, wrap_code
+from .journal import cache_best_node
 
 logger = logging.getLogger("aide")
 
@@ -465,10 +466,10 @@ class Agent:
                 "stage_end", "Improve", supress_errors=True
             )
         if exec_callback:
-            exec_result = exec_callback(result_node.code, True)
+            exec_result = exec_callback(result_node.code)
         else:
             exec_result = await callback_manager.execute_callback(
-                "exec", result_node.code, True
+                "exec", result_node.code
             )
 
         result_node = self.parse_exec_result(
@@ -477,6 +478,8 @@ class Agent:
             exec_callback=exec_callback,
             callback_manager=callback_manager,
         )
+
+        # TODO: Fix this to check submission when using modal. Also verify the cache_best_node function
         # handle final cases where we missed buggy nodes somehow
         if not result_node.is_buggy:
             if not (self.cfg.workspace_dir / "submission" / "submission.csv").exists():
@@ -493,21 +496,7 @@ class Agent:
         if best_node is not None:
             if best_node.id == result_node.id:
                 logger.info(f"Node {result_node.id} is the best node so far")
-                best_solution_dir = self.cfg.workspace_dir / "best_solution"
-                best_solution_dir.mkdir(exist_ok=True, parents=True)
-                # copy submission/submission.csv to best_submission/submission.csv
-                best_submission_dir = self.cfg.workspace_dir / "best_submission"
-                best_submission_dir.mkdir(exist_ok=True, parents=True)
-                shutil.copy(
-                    self.cfg.workspace_dir / "submission" / "submission.csv",
-                    best_submission_dir,
-                )
-                # copy solution.py and relevant node id to best_solution/
-                with open(best_solution_dir / "solution.py", "w") as f:
-                    f.write(result_node.code)
-                # take note of the node id of the best node
-                with open(best_solution_dir / "node_id.txt", "w") as f:
-                    f.write(str(result_node.id))
+                cache_best_node(result_node, self.cfg.workspace_dir, use_modal=self.cfg.exec.use_modal)
             else:
                 logger.info(f"Node {result_node.id} is not the best node")
                 logger.info(f"Node {best_node.id} is still the best node")
@@ -521,6 +510,7 @@ class Agent:
         max_attempts=3,
         exec_callback: ExecCallbackType = None,
         callback_manager=None,
+        use_modal=False
     ) -> Node:
         logger.info(f"Agent is parsing execution results for node {node.id}")
 
@@ -555,7 +545,7 @@ class Agent:
         if not isinstance(response, SubmitReview):
             logger.error(f"Expected SubmitReview but got {type(response)}")
             return None
-
+        
         if (
             response.missing_libraries is not None
             and len(response.missing_libraries) > 0
@@ -596,10 +586,13 @@ class Agent:
             response.metric = None
 
         # do an extra check, to catch cases where judge fails
-        has_csv_submission = (
-            self.cfg.workspace_dir / "submission" / "submission.csv"
-        ).exists()
-
+        if use_modal: 
+            has_csv_submission = await callback_manager.execute_callback("has_submission")
+        else: 
+            has_csv_submission = (
+                self.cfg.workspace_dir / "submission" / "submission.csv"
+            ).exists()
+        
         node.analysis = response.summary
         node.is_buggy = (
             response.is_bug
