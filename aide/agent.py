@@ -482,12 +482,19 @@ class Agent:
         # TODO: Fix this to check submission when using modal. Also verify the cache_best_node function
         # handle final cases where we missed buggy nodes somehow
         if not result_node.is_buggy:
-            if not (self.cfg.workspace_dir / "submission" / "submission.csv").exists():
+            submission_exists = False
+            if self.cfg.exec.use_modal:
+                submission_exists = await callback_manager.execute_callback("has_submission")
+            elif not (
+                self.cfg.workspace_dir / "submission" / "submission.csv"
+            ).exists():
+                submission_exists = False
+            else:
+                submission_exists = True
+            if not submission_exists:
                 result_node.is_buggy = True
                 result_node.metric = WorstMetricValue()
-                logger.info(
-                    f"Actually, node {result_node.id} did not produce a submission.csv"
-                )
+                logger.info(f"Actually, node {result_node.id} did not produce a submission.csv")
         self.journal.append(result_node)
 
         # if the result_node is the best node, cache its submission.csv and solution.py
