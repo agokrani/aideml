@@ -42,7 +42,7 @@ def execute_code(interpreter: Interpreter):
         ) as live:  # Adjust refresh rate as needed
             if inspect.iscoroutinefunction(interpreter.run):
                 result = await interpreter.run(*args, **kwargs)
-            else: 
+            else:
                 result = interpreter.run(*args, **kwargs)
             live.update("[bold red]Done Executing the code[/bold red]")
         return result

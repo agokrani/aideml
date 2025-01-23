@@ -20,6 +20,7 @@ from .utils.metric import MetricValue
 from .utils.response import trim_long_string
 from pathlib import Path
 
+
 @dataclass(eq=False)
 class Node(DataClassJsonMixin):
     """A single node in the solution tree. Contains code, execution results, and evaluation information."""
@@ -275,7 +276,7 @@ def cache_best_node(node: Node, workspace_dir: Path | str, use_modal=False):
     best_solution_dir = workspace_dir / "best_solution"
     best_solution_dir.mkdir(exist_ok=True, parents=True)
 
-    # Create best submission directory 
+    # Create best submission directory
     best_submission_dir = workspace_dir / "best_submission"
     best_submission_dir.mkdir(exist_ok=True, parents=True)
 

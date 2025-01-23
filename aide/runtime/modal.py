@@ -64,8 +64,8 @@ class ModalRuntime(Runtime):
             app=self.app,
             volumes={"/vol": self.volume},
             workdir=self.modal_working_dir,
-            cpu=36, #TODO: Make this configurable
-            memory=36864, #TODO: Make this configurable
+            cpu=36,  # TODO: Make this configurable
+            memory=36864,  # TODO: Make this configurable
             # Modal sandboxes support GPUs!
             gpu=self.gpu,
             # you can also pass secrets here -- note that the main app's secrets are not shared
