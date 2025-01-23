@@ -18,11 +18,9 @@ from rich.padding import Padding
 from rich.columns import Columns
 from rich.console import Group
 from rich.panel import Panel
-from omegaconf import OmegaConf
 from aide import backend
 from aide.agent import Agent
 from aide.callbacks.manager import CallbackManager
-from aide.interpreter import Interpreter
 from aide.journal import Journal
 from aide.run import VerboseFilter, journal_to_rich_tree
 from aide.runtime import get_runtime
@@ -89,7 +87,6 @@ def start(mode, config_path=None):
     task_desc = load_task_desc(cfg)
     task_desc_str = backend.compile_prompt_to_md(task_desc)
 
-
     def stage_start(stage_name, message=None, color="green"):
         global live_display
         if live_display:
@@ -110,7 +107,7 @@ def start(mode, config_path=None):
     stage_start("agent workspace", "preparing ")
     prep_agent_workspace(cfg)
     stage_end()
-    
+
     journal = Journal()
     logger.info(f'Starting run "{cfg.exp_name}"')
 
@@ -119,19 +116,16 @@ def start(mode, config_path=None):
         cfg=cfg,
         journal=journal,
     )
-    
-    #TODO: Please setup correct runtime. 
-    # interpreter = LocalRuntime(cfg.workspace_dir, cfg.exec.timeout, cfg.exec.format_tb_ipython)
-    #interpreter = ModalRuntime(cfg.workspace_dir, cfg.exec.timeout, cfg.exec.format_tb_ipython)
-    # interpreter = Interpreter(
-    #     cfg.workspace_dir, **OmegaConf.to_container(cfg.exec)  # type: ignore
-    # )
-    
+
     stage_start("runtime", "creating ")
-    interpreter = get_runtime(cfg.workspace_dir, cfg.exec, task_id=cfg.task_id, preprocess_data=cfg.preprocess_data)
+    interpreter = get_runtime(
+        cfg.workspace_dir,
+        cfg.exec,
+        task_id=cfg.task_id,
+        preprocess_data=cfg.preprocess_data,
+    )
     stage_end()
-    
-   
+
     if cfg.initial_solution.exp_name is not None:
         journal_json = (
             cfg.log_dir.parent / cfg.initial_solution.exp_name / "journal.json"
@@ -152,26 +146,32 @@ def start(mode, config_path=None):
         if node:
             # TODO: Remove this from here once the proper place to set load this file has been identified
             loop = asyncio.get_event_loop()
-            
+
             stage_start("initial solution", "executing ", color="magenta")
             exec_result = loop.run_until_complete(interpreter.run(code=node.code))
             callback_manager = None
             if cfg.exec.use_modal:
                 callback_manager = CallbackManager()
                 assert isinstance(interpreter, ModalRuntime)
-                callback_manager.register_callback("has_submission", interpreter.has_submission)
+                callback_manager.register_callback(
+                    "has_submission", interpreter.has_submission
+                )
+            callback_manager.register_callback(
+                "install_dependecies", interpreter.install_missing_libraries
+            )
+            callback_manager.register_callback("exec", interpreter.run)
             node = loop.run_until_complete(
                 agent.parse_exec_result(
                     node=node,
                     exec_result=exec_result,
-                    max_attempts=0,
+                    max_attempts=1,
                     callback_manager=callback_manager,
-                    use_modal=cfg.exec.use_modal
+                    use_modal=cfg.exec.use_modal,
                 )
             )
             stage_end()
             agent.journal.append(node)
-            
+
     if mode == "autopilot":
         console.print("Starting autopilot run...\n")
 
@@ -241,6 +241,19 @@ def start(mode, config_path=None):
         callback_manager.register_callbacks(
             {"exec": exec_callback, "stage_start": stage_start}
         )
+        if cfg.exec.use_modal:
+            assert isinstance(interpreter, ModalRuntime)
+            callback_manager.register_callback(
+                "has_submission", interpreter.has_submission
+            )
+            callback_manager.register_callback(
+                "remove_submission_directory",
+                interpreter.remove_previous_submissions_directory,
+            )
+
+        callback_manager.register_callback(
+            "install_dependecies", interpreter.install_missing_libraries
+        )
 
         autopilot = AutoPilot(agent, interpreter, cfg, callback_manager)
 
@@ -257,7 +270,6 @@ def start(mode, config_path=None):
 
         callback_manager = CallbackManager()
 
-
         callback_manager.register_callbacks(
             {
                 "tool_output": console.print,
@@ -267,6 +279,19 @@ def start(mode, config_path=None):
                 "stage_start": stage_start,
                 "stage_end": stage_end,
             }
+        )
+        if cfg.exec.use_modal:
+            assert isinstance(interpreter, ModalRuntime)
+            callback_manager.register_callback(
+                "has_submission", interpreter.has_submission
+            )
+            callback_manager.register_callback(
+                "remove_submission_directory",
+                interpreter.remove_previous_submissions_directory,
+            )
+
+        callback_manager.register_callback(
+            "install_dependecies", interpreter.install_missing_libraries
         )
 
         copilot = CoPilot(agent, interpreter, cfg, callback_manager)

@@ -82,7 +82,6 @@ class Config(Hashable):
     goal: str | None
     eval: str | None
 
-    
     log_dir: Path
     log_level: str
     workspace_dir: Path
@@ -99,7 +98,7 @@ class Config(Hashable):
     generate_report: bool
     report: StageConfig
     agent: AgentConfig
-    
+
     task_id: str | None = None
 
 
@@ -214,10 +213,10 @@ def prep_agent_workspace(cfg: Config):
         volume = modal.Volume.from_name("agent-volume", create_if_missing=True)
         task_path = f"tasks/{cfg.task_id}"
         dirs = []
-        try: 
+        try:
             dirs = volume.listdir("/tasks")
             dirs = [d.path.split("/")[1] for d in dirs]
-        except:
+        except FileNotFoundError:
             with volume.batch_upload() as batch:
                 batch.put_directory(cfg.data_dir, task_path)
             dirs.append(cfg.task_id)
@@ -225,7 +224,7 @@ def prep_agent_workspace(cfg: Config):
         if cfg.task_id not in dirs:
             with volume.batch_upload() as batch:
                 batch.put_directory(cfg.data_dir, task_path)
-    
+
     if cfg.preprocess_data:
         preproc_data(cfg.workspace_dir / "input")
 

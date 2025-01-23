@@ -79,6 +79,6 @@ def load_code_file(path: Union[str, Path]) -> "Node":
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             code = f.read()
-            return Node(code=code, parent=None)
+            return Node(code=code, parent=None, plan="Preliminary Solution")
     except IOError as e:
         raise IOError(f"Error reading file '{file_path}': {str(e)}")

@@ -1,9 +1,10 @@
-from aide.callbacks.manager import CallbackManager
-from aide.workflow.base import Workflow
 from aide.agent import Agent
-from aide.interpreter import Interpreter
 from aide.utils.config import Config
 from aide.utils.config import save_run
+from aide.workflow.base import Workflow
+from aide.interpreter import Interpreter
+from aide.runtime.modal import ModalRuntime
+from aide.callbacks.manager import CallbackManager
 
 
 class AutoPilot(Workflow):
@@ -26,6 +27,31 @@ class AutoPilot(Workflow):
             self.callback_manager.callbacks["exec"]
         except KeyError:
             self.callback_manager.register_callback("exec", self.interpreter.run)
+
+        if self.cfg.exec.use_modal:
+            assert isinstance(self.interpreter, ModalRuntime)
+            try:
+                self.callback_manager.callbacks["has_submission"]
+            except KeyError:
+                self.callback_manager.register_callback(
+                    "has_submission", self.interpreter.has_submission
+                )
+
+            try:
+                self.callback_manager.callbacks["remove_submission_directory"]
+            except KeyError:
+                callback_manager.register_callback(
+                    "remove_submission_directory",
+                    self.interpreter.remove_previous_submissions_directory,
+                )
+
+        # outside of If block on purpose because both local and modal runtimes need to install dependencies
+        try:
+            self.callback_manager.callbacks["install_dependencies"]
+        except KeyError:
+            callback_manager.register_callback(
+                "install_dependecies", self.interpreter.install_missing_libraries
+            )
 
     async def run(self):
         global_step = len(self.journal)

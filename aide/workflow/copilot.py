@@ -1,19 +1,17 @@
-import sys
-import signal
 import shutil
-import asyncio
 from omegaconf import Node
 from pydantic import BaseModel
-from aide.actions.action import Debug, Draft, Finish, Improve
-from aide.callbacks.manager import CallbackManager
-from aide.utils.metric import WorstMetricValue
 from aide.workflow.base import Workflow
-from aide.agent import Agent, ActionAgent
-from aide.interpreter import Interpreter
-from aide.utils.config import Config, save_run
 from aide.runtime.runtime import Runtime
-from aide.backend import provider_to_tool_response_message_func
 from aide.journal import cache_best_node
+from aide.agent import Agent, ActionAgent
+from aide.runtime.modal import ModalRuntime
+from aide.utils.metric import WorstMetricValue
+from aide.utils.config import Config, save_run
+from aide.callbacks.manager import CallbackManager
+
+from aide.actions.action import Debug, Draft, Finish, Improve
+from aide.backend import provider_to_tool_response_message_func
 
 import logging
 
@@ -41,14 +39,39 @@ class CoPilot(Workflow):
         except KeyError:
             self.callback_manager.register_callback("exec", self.interpreter.run)
 
+        if self.cfg.exec.use_modal:
+            assert isinstance(self.interpreter, ModalRuntime)
+
+            try:
+                self.callback_manager.callbacks["has_submission"]
+            except KeyError:
+                self.callback_manager.register_callback(
+                    "has_submission", self.interpreter.has_submission
+                )
+
+            try:
+                self.callback_manager.callbacks["remove_submission_directory"]
+            except KeyError:
+                callback_manager.register_callback(
+                    "remove_submission_directory",
+                    self.interpreter.remove_previous_submissions_directory,
+                )
+
+        # outside of If block on purpose because both local and modal runtimes need to install dependencies
+        try:
+            self.callback_manager.callbacks["install_dependencies"]
+        except KeyError:
+            callback_manager.register_callback(
+                "install_dependecies", self.interpreter.install_missing_libraries
+            )
 
     #     # Register signal handlers
-    #     signal.signal(signal.SIGINT, self._signal_handler) 
+    #     signal.signal(signal.SIGINT, self._signal_handler)
     #     signal.signal(signal.SIGTERM, self._signal_handler)
 
     # async def _signal_handler(self, signum, frame):
     #     """Handle interrupt signals gracefully"""
-        
+
     #     logger.info(f"Received signal {signum}, initiating cleanup...")
     #     try:
     #         # Get or create event loop
@@ -60,9 +83,9 @@ class CoPilot(Workflow):
 
     #         # Run cleanup
     #         asyncio.create_task(loop.run_until_complete(self.interpreter.cleanup_session()))
-                
+
     #         logger.info("Cleanup completed successfully")
-            
+
     #     except Exception as e:
     #         logger.error(f"Error during cleanup: {e}")
     #     finally:
@@ -139,7 +162,9 @@ class CoPilot(Workflow):
 
             exit_handler = self.callback_manager.callbacks.get("exit")
             if exit_handler is not None:
-                await self.callback_manager.execute_callback("exit", user_feedback, self.interpreter)
+                await self.callback_manager.execute_callback(
+                    "exit", user_feedback, self.interpreter
+                )
 
             await self.callback_manager.execute_callback(
                 "stage_start", "next action", message="Predicting ", supress_errors=True
@@ -166,7 +191,7 @@ class CoPilot(Workflow):
             exec_result = await self.callback_manager.execute_callback(
                 "exec", current_node.code
             )
-            
+
             current_node = await self.agent.parse_exec_result(
                 node=current_node,
                 exec_result=exec_result,
@@ -177,11 +202,13 @@ class CoPilot(Workflow):
             message += f"{current_node.generate_summary()}"
 
             await self.callback_manager.execute_callback("tool_output", message)
-
             submission_exists = False
             if not current_node.is_buggy:
+
                 if self.cfg.exec.use_modal:
-                    submission_exists = await self.callback_manager.execute_callback("has_submission")
+                    submission_exists = await self.callback_manager.execute_callback(
+                        "has_submission"
+                    )
                 else:
                     submission_exists = True
 
@@ -215,14 +242,21 @@ class CoPilot(Workflow):
                     await self.callback_manager.execute_callback(
                         "tool_output", f"Node {current_node.id} is the best node so far"
                     )
-                    cache_best_node(current_node, self.cfg.workspace_dir, self.cfg.exec.use_modal)
+                    cache_best_node(
+                        current_node, self.cfg.workspace_dir, self.cfg.exec.use_modal
+                    )
                 else:
                     logger.info(f"Node {current_node.id} is not the best node")
                     logger.info(f"Node {best_node.id} is still the best node")
-
             save_run(self.cfg, self.journal)
 
     async def step(self, action: BaseModel, parent_node: Node | None = None):
+        # clear the submission dir from previous steps
+        if not self.cfg.exec.use_modal:
+            shutil.rmtree(self.cfg.workspace_dir / "submission", ignore_errors=True)
+            (self.cfg.workspace_dir / "submission").mkdir(exist_ok=True)
+        else:
+            await self.callback_manager.execute_callback("remove_submission_directory")
 
         await self.callback_manager.execute_callback(
             "stage_start", action.__class__.__name__, supress_errors=True

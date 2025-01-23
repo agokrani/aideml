@@ -6,7 +6,6 @@ from typing import Any, Callable, List
 import humanize
 from aide.function import SearchArxiv, SearchPapersWithCode
 from aide.actions import Debug, Draft, Improve, Finish, SubmitReview
-from aide.utils.util import install_missing_libraries
 from .backend import query
 from .interpreter import ExecutionResult
 from .journal import Journal, Node
@@ -432,8 +431,11 @@ class Agent:
     # For backward compatibility, need to change once the pipeline is verified
     async def step(self, exec_callback: ExecCallbackType = None, callback_manager=None):
         # clear the submission dir from previous steps
-        shutil.rmtree(self.cfg.workspace_dir / "submission", ignore_errors=True)
-        (self.cfg.workspace_dir / "submission").mkdir(exist_ok=True)
+        if not self.cfg.exec.use_modal:
+            shutil.rmtree(self.cfg.workspace_dir / "submission", ignore_errors=True)
+            (self.cfg.workspace_dir / "submission").mkdir(exist_ok=True)
+        else:
+            await callback_manager.execute_callback("remove_submission_directory")
 
         if not self.journal.nodes or self.data_preview is None:
             self.update_data_preview()
@@ -484,7 +486,9 @@ class Agent:
         if not result_node.is_buggy:
             submission_exists = False
             if self.cfg.exec.use_modal:
-                submission_exists = await callback_manager.execute_callback("has_submission")
+                submission_exists = await callback_manager.execute_callback(
+                    "has_submission"
+                )
             elif not (
                 self.cfg.workspace_dir / "submission" / "submission.csv"
             ).exists():
@@ -494,7 +498,9 @@ class Agent:
             if not submission_exists:
                 result_node.is_buggy = True
                 result_node.metric = WorstMetricValue()
-                logger.info(f"Actually, node {result_node.id} did not produce a submission.csv")
+                logger.info(
+                    f"Actually, node {result_node.id} did not produce a submission.csv"
+                )
         self.journal.append(result_node)
 
         # if the result_node is the best node, cache its submission.csv and solution.py
@@ -503,7 +509,11 @@ class Agent:
         if best_node is not None:
             if best_node.id == result_node.id:
                 logger.info(f"Node {result_node.id} is the best node so far")
-                cache_best_node(result_node, self.cfg.workspace_dir, use_modal=self.cfg.exec.use_modal)
+                cache_best_node(
+                    result_node,
+                    self.cfg.workspace_dir,
+                    use_modal=self.cfg.exec.use_modal,
+                )
             else:
                 logger.info(f"Node {result_node.id} is not the best node")
                 logger.info(f"Node {best_node.id} is still the best node")
@@ -517,7 +527,7 @@ class Agent:
         max_attempts=3,
         exec_callback: ExecCallbackType = None,
         callback_manager=None,
-        use_modal=False
+        use_modal=False,
     ) -> Node:
         logger.info(f"Agent is parsing execution results for node {node.id}")
 
@@ -552,7 +562,6 @@ class Agent:
         if not isinstance(response, SubmitReview):
             logger.error(f"Expected SubmitReview but got {type(response)}")
             return None
-        
         if (
             response.missing_libraries is not None
             and len(response.missing_libraries) > 0
@@ -562,13 +571,20 @@ class Agent:
                     f"Agent is missing libraries, attempting to install them: {response.missing_libraries}"
                 )
                 # install missing libraries
-                install_missing_libraries(response.missing_libraries)
+                await callback_manager.execute_callback(
+                    "install_dependecies", response.missing_libraries
+                )
+
                 # Re-execute the code after installing libraries
                 if exec_callback:
-                    exec_result = exec_callback(node.code, True)
+                    exec_result = exec_callback(
+                        node.code, True if not self.cfg.exec.use_modal else False
+                    )
                 else:
                     exec_result = await callback_manager.execute_callback(
-                        "exec", node.code, True
+                        "exec",
+                        node.code,
+                        True if not self.cfg.exec.use_modal else False,
                     )
                 # Recursively parse the new execution result
                 return await self.parse_exec_result(
@@ -593,13 +609,15 @@ class Agent:
             response.metric = None
 
         # do an extra check, to catch cases where judge fails
-        if use_modal: 
-            has_csv_submission = await callback_manager.execute_callback("has_submission")
-        else: 
+        if use_modal:
+            has_csv_submission = await callback_manager.execute_callback(
+                "has_submission"
+            )
+        else:
             has_csv_submission = (
                 self.cfg.workspace_dir / "submission" / "submission.csv"
             ).exists()
-        
+
         node.analysis = response.summary
         node.is_buggy = (
             response.is_bug

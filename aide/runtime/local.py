@@ -16,7 +16,7 @@ class LocalRuntime(Runtime):
         working_dir: Path | str,
         timeout: int = 3600,
         format_tb_ipython: bool = False,
-        # agent_file_name: str = "runfile.py",
+        agent_file_name: str = "runfile.py",
     ):
         self.working_dir = Path(working_dir).resolve()
         assert (
@@ -26,6 +26,7 @@ class LocalRuntime(Runtime):
         self.format_tb_ipython = format_tb_ipython
         self.process = None
         # self.process: Process = None  # type: ignore
+        self.agent_file_name = agent_file_name
 
     async def cleanup_session(self):
         self.process.kill()
@@ -48,9 +49,9 @@ class LocalRuntime(Runtime):
         if is_command:
             command2exec = code
         else:
-            with open(os.path.join(self.working_dir, "runfile.py"), "w") as f:
+            with open(os.path.join(self.working_dir, self.agent_file_name), "w") as f:
                 f.write(code)
-            command2exec = "python runfile.py"
+            command2exec = f"python {self.agent_file_name}"
 
         output: list[str] = []
         try:
@@ -62,9 +63,7 @@ class LocalRuntime(Runtime):
                 cwd=self.working_dir,
             )
             try:
-                await asyncio.wait_for(
-                    self.process.wait(), timeout=self.timeout
-                )
+                await asyncio.wait_for(self.process.wait(), timeout=self.timeout)
                 exec_time = time.time() - start_time
                 if self.process.returncode == 0:
                     stdout = await self.process.stdout.read()
@@ -90,3 +89,10 @@ class LocalRuntime(Runtime):
                 exc_info={},
                 exc_stack=[],
             )
+
+    def install_missing_libraries(self, missing_libraries: list[str]):
+        import subprocess
+        import sys
+
+        for library in missing_libraries:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", library])
