@@ -152,7 +152,7 @@ def start(mode, config_path=None):
             exec_result = loop.run_until_complete(interpreter.run(code=node.code))
             callback_manager = CallbackManager()
             if cfg.exec.use_modal:
-                
+
                 assert isinstance(interpreter, ModalRuntime)
                 callback_manager.register_callback(
                     "has_submission", interpreter.has_submission
@@ -263,7 +263,7 @@ def start(mode, config_path=None):
         callback_manager.register_callback(
             "cache_best_node", interpreter.cache_best_node
         )
-        
+
         autopilot = AutoPilot(agent, interpreter, cfg, callback_manager)
 
         with Live(generate_display(), refresh_per_second=16, screen=True) as live:

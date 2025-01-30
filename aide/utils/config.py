@@ -215,11 +215,11 @@ def prep_agent_workspace(cfg: Config):
         volume = modal.Volume.from_name("agent-volume", create_if_missing=True)
         task_path = f"tasks/{cfg.task_id}"
         dirs = []
-        
+
         try:
             dirs = volume.listdir("/tasks")
             dirs = [d.path.split("/")[1] for d in dirs]
-        except GRPCError as e:
+        except GRPCError:
             with volume.batch_upload() as batch:
                 batch.put_directory(cfg.data_dir, task_path)
             dirs.append(cfg.task_id)

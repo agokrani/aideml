@@ -4,6 +4,7 @@ import logging
 
 logger = logging.getLogger("aide")
 
+
 class CallbackManager:
     def __init__(self):
         self.callbacks: Dict[str, Callable[..., Any]] = {}
@@ -57,7 +58,9 @@ class CallbackManager:
                 return callback(*args, **kwargs)
         except Exception as e:
             if supress_errors:
-                logger.error(f"Error executing callback '{name}': {str(e)}", extra={"verbose": True})
+                logger.error(
+                    f"Error executing callback '{name}': {str(e)}",
+                    extra={"verbose": True},
+                )
                 return None
             raise
-            

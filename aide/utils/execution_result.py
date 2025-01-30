@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from dataclasses_json import DataClassJsonMixin
 
+
 @dataclass
 class ExecutionResult(DataClassJsonMixin):
     """
@@ -13,5 +14,3 @@ class ExecutionResult(DataClassJsonMixin):
     exc_type: str | None
     exc_info: dict | None = None
     exc_stack: list[tuple] | None = None
-
-

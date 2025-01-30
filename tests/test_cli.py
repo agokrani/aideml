@@ -10,6 +10,7 @@ import asyncio
 # Configure pytest-asyncio to use function scope for event loops
 pytestmark = pytest.mark.asyncio(scope="function")
 
+
 @pytest.fixture
 def event_loop():
     """Create an instance of the default event loop for each test case."""
@@ -83,16 +84,20 @@ async def test_logging_setup(mock_load_cfg, runner, mock_config, tmp_path):
     with patch("logging.FileHandler") as mock_handler:
         config_path = tmp_path / "config.yaml"
         config_path.write_text("dummy config content")
-        result = runner.invoke(start, ["autopilot", "-c", str(config_path)])
-        
+        runner.invoke(start, ["autopilot", "-c", str(config_path)])
+
         # Verify two file handlers were created
         assert mock_handler.call_count == 2, "Expected two file handlers to be created"
-        
+
         # Verify the calls were made with correct file paths
         calls = mock_handler.call_args_list
-        assert str(tmp_path / "aide.log") in str(calls[0]), "First handler should be for aide.log"
-        assert str(tmp_path / "aide.verbose.log") in str(calls[1]), "Second handler should be for aide.verbose.log"
-        
+        assert str(tmp_path / "aide.log") in str(
+            calls[0]
+        ), "First handler should be for aide.log"
+        assert str(tmp_path / "aide.verbose.log") in str(
+            calls[1]
+        ), "Second handler should be for aide.verbose.log"
+
         # Verify the first handler has the VerboseFilter
         mock_handler.return_value.addFilter.assert_called_once()
 
@@ -125,16 +130,16 @@ async def test_autopilot_mode(
     mock_load_cfg.return_value = mock_config
     config_path = tmp_path / "config.yaml"
     config_path.write_text("dummy config content")
-    
+
     mock_autopilot_instance = AsyncMock()
     mock_autopilot.return_value = mock_autopilot_instance
     mock_autopilot_instance.run = AsyncMock()
     mock_mkdir.return_value = None
     mock_file_handler.return_value = MagicMock()
-    
+
     mock_load_task_desc.return_value = "Test task description"
-    
-    with patch('asyncio.run') as mock_asyncio_run:
+
+    with patch("asyncio.run") as mock_asyncio_run:
         result = runner.invoke(start, ["autopilot", "-c", str(config_path)])
         print(result.output)
         assert result.exit_code == 0
@@ -176,23 +181,23 @@ async def test_copilot_mode(
     mock_load_cfg.return_value = mock_config
     config_path = tmp_path / "config.yaml"
     config_path.write_text("dummy config content")
-    
+
     # Setup mocks
     mock_copilot_instance = AsyncMock()
     mock_copilot.return_value = mock_copilot_instance
     mock_copilot_instance.run = AsyncMock()
     mock_mkdir.return_value = None
     mock_file_handler.return_value = MagicMock()
-    
+
     # Mock task description
     mock_load_task_desc.return_value = "Test task description"
-    
+
     def mock_run(coro):
         return None
-        
-    with patch('asyncio.run', side_effect=mock_run):
+
+    with patch("asyncio.run", side_effect=mock_run):
         result = runner.invoke(start, ["copilot", "-c", str(config_path)])
-        
+
         assert result.exit_code == 0
         mock_load_cfg.assert_called_once_with(str(config_path))
         mock_prep_workspace.assert_called_once()
@@ -225,13 +230,13 @@ async def test_initial_solution_with_exp_name(
     mock_load_cfg.return_value = mock_config
     mock_mkdir.return_value = None
     mock_file_handler.return_value = MagicMock()
-    
+
     # Mock task description
     mock_load_task_desc.return_value = "Test task description"
-    
+
     config_path = tmp_path / "config.yaml"
     config_path.write_text("dummy config content")
-    
+
     with patch("aide.cli.load_json") as mock_load_json:
         mock_journal = MagicMock()
         mock_node = MagicMock()
@@ -240,10 +245,10 @@ async def test_initial_solution_with_exp_name(
         mock_node.metric.value = 0.5
         mock_journal.get.return_value = mock_node
         mock_load_json.return_value = mock_journal
-        
-        with patch('asyncio.run') as mock_asyncio_run:
+
+        with patch("asyncio.run"):
             result = runner.invoke(start, ["autopilot", "-c", str(config_path)])
-            
+
             assert result.exit_code == 0
             mock_load_json.assert_called_once()
             mock_journal.get.assert_called_once_with("node123")
@@ -279,32 +284,34 @@ async def test_initial_solution_with_code_file(
     mock_load_cfg.return_value = mock_config
     mock_mkdir.return_value = None
     mock_file_handler.return_value = MagicMock()
-    
+
     # Mock task description
     mock_load_task_desc.return_value = "Test task description"
-    
+
     # Mock callback manager
     mock_callback_instance = MagicMock()
     mock_callback_manager.return_value = mock_callback_instance
     mock_callback_instance.execute_callback = AsyncMock()
     mock_callback_instance.execute_callback.return_value = {"success": True}
-    
+
     # Mock Agent
     mock_agent_instance = MagicMock()
     mock_agent_class.return_value = mock_agent_instance
     mock_agent_instance.parse_exec_result = AsyncMock()
-    mock_agent_instance.parse_exec_result.return_value = MagicMock(is_buggy=False, metric=0.5)
-    
+    mock_agent_instance.parse_exec_result.return_value = MagicMock(
+        is_buggy=False, metric=0.5
+    )
+
     config_path = tmp_path / "config.yaml"
     config_path.write_text("dummy config content")
-    
+
     with patch("aide.cli.load_code_file") as mock_load_code_file:
         mock_node = MagicMock()
         mock_node.code = "test code"
         mock_node.is_buggy = False
         mock_node.metric = 0.5
         mock_load_code_file.return_value = mock_node
-        
+
         # Mock the interpreter with proper ExecutionResult
         mock_interpreter = AsyncMock()
         exec_result = ExecutionResult(
@@ -312,25 +319,26 @@ async def test_initial_solution_with_code_file(
             exec_time=1.0,
             exc_type=None,
             exc_info={},
-            exc_stack=[]
+            exc_stack=[],
         )
         mock_interpreter.run.return_value = exec_result
         mock_interpreter.install_missing_libraries = AsyncMock()
-        
+
         with patch("aide.cli.get_runtime", return_value=mock_interpreter):
             # Mock both get_event_loop and run
             with patch("asyncio.get_event_loop") as mock_get_loop:
                 mock_loop = MagicMock()
                 mock_loop.run_until_complete = MagicMock(return_value=exec_result)
                 mock_get_loop.return_value = mock_loop
-                
-                with patch('asyncio.run') as mock_asyncio_run:
+
+                with patch("asyncio.run"):
                     result = runner.invoke(start, ["autopilot", "-c", str(config_path)])
-                    
+
                     assert result.exit_code == 0
                     mock_load_code_file.assert_called_once_with("initial.py")
                     mock_mkdir.assert_called()
                     assert mock_file_handler.call_count == 2
+
 
 async def test_missing_config_path(runner):
     result = runner.invoke(start, ["autopilot"])
@@ -358,43 +366,48 @@ async def test_logging_setup_with_verbose_filter(
     mock_config.agent.steps = 5  # Ensure this is an integer, not a MagicMock
     mock_load_cfg.return_value = mock_config
     mock_load_task_desc.return_value = "Test task description"
-    
+
     # Mock AutoPilot
     mock_autopilot_instance = AsyncMock()
     mock_autopilot.return_value = mock_autopilot_instance
     mock_autopilot_instance.run = AsyncMock()
-    
+
     # Mock VerboseFilter
     mock_filter_instance = MagicMock()
     mock_filter.return_value = mock_filter_instance
-    
+
     config_path = tmp_path / "config.yaml"
     config_path.write_text("dummy config content")
-    
+
     with patch("logging.FileHandler") as mock_handler:
         mock_handler_instance = MagicMock()
         mock_handler.return_value = mock_handler_instance
-        
+
         async def mock_run(coro):
             if asyncio.iscoroutine(coro):
                 return await coro
             return coro
-            
-        with patch('asyncio.run', side_effect=mock_run):
+
+        with patch("asyncio.run", side_effect=mock_run):
             result = runner.invoke(start, ["autopilot", "-c", str(config_path)])
-            
+
             assert result.exit_code == 0
             # Verify handlers were created with correct paths
             assert mock_handler.call_count == 2
             calls = mock_handler.call_args_list
             assert str(tmp_path / "aide.log") in str(calls[0])
             assert str(tmp_path / "aide.verbose.log") in str(calls[1])
-            
+
             # Verify VerboseFilter was added to the first handler
-            mock_handler_instance.addFilter.assert_called_once_with(mock_filter_instance)
+            mock_handler_instance.addFilter.assert_called_once_with(
+                mock_filter_instance
+            )
 
 
 async def test_invalid_config_path(runner):
     result = runner.invoke(start, ["autopilot", "-c", "nonexistent.yaml"])
     assert result.exit_code != 0
-    assert "Invalid value for '--config-path' / '-c': Path 'nonexistent.yaml' does not exist." in result.output
+    assert (
+        "Invalid value for '--config-path' / '-c': Path 'nonexistent.yaml' does not exist."
+        in result.output
+    )

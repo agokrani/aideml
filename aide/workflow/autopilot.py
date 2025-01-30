@@ -9,6 +9,7 @@ from aide.callbacks.manager import CallbackManager
 
 logger = logging.getLogger("aide")
 
+
 class AutoPilot(Workflow):
     def __init__(
         self,
@@ -54,7 +55,7 @@ class AutoPilot(Workflow):
             callback_manager.register_callback(
                 "install_dependencies", self.interpreter.install_missing_libraries
             )
-        try: 
+        try:
             self.callback_manager.callbacks["cache_best_node"]
         except KeyError:
             callback_manager.register_callback(

@@ -1,13 +1,11 @@
 import pytest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-from unittest.mock import ANY
 from aide.agent import Agent, ActionAgent
 from aide.journal import Journal, Node
-from aide.utils.config import Config
 from aide.utils.metric import MetricValue, WorstMetricValue
 from aide.utils.execution_result import ExecutionResult
 from aide.actions import SubmitReview
+
 
 @pytest.fixture
 def mock_config(tmp_path):
@@ -37,9 +35,11 @@ def mock_config(tmp_path):
     config.workspace_dir = workspace_dir
     return config
 
+
 @pytest.fixture
 def mock_journal():
     return Journal()
+
 
 @pytest.fixture
 def agent(mock_config, mock_journal):
@@ -49,6 +49,7 @@ def agent(mock_config, mock_journal):
         journal=mock_journal,
     )
 
+
 def test_agent_initialization(agent, mock_config):
     assert agent.task_desc == "Train a classifier on the given dataset"
     assert agent.cfg == mock_config
@@ -56,27 +57,32 @@ def test_agent_initialization(agent, mock_config):
     assert agent._initial_research is None
     assert agent.data_preview is None
 
+
 def test_search_policy_initial_drafting(agent):
     # When not enough drafts, should return None to trigger new draft
     assert agent.search_policy() is None
+
 
 def test_search_policy_debugging(agent):
     # First add enough draft nodes to satisfy the initial drafting check
     for _ in range(agent.acfg.search.num_drafts):
         draft_node = Node(plan="draft", code="code")
         draft_node.is_buggy = False
-        draft_node.metric = MetricValue(0.5, maximize=True)  # Add metric to make it a good node
+        draft_node.metric = MetricValue(
+            0.5, maximize=True
+        )  # Add metric to make it a good node
         agent.journal.append(draft_node)
 
     # Create a buggy leaf node
     node = Node(plan="test plan", code="test code")
     node.is_buggy = True
     agent.journal.append(node)
-    
+
     # Mock random to force debug path
-    with patch('random.random', return_value=0.1):  # Less than debug_prob
+    with patch("random.random", return_value=0.1):  # Less than debug_prob
         selected_node = agent.search_policy()
         assert selected_node == node
+
 
 def test_search_policy_improvement(agent):
     # Create a good node
@@ -84,26 +90,29 @@ def test_search_policy_improvement(agent):
     node.is_buggy = False
     node.metric = MetricValue(0.8, maximize=True)
     agent.journal.append(node)
-    
+
     # Add enough drafts
     for _ in range(agent.acfg.search.num_drafts):
         draft_node = Node(plan="draft", code="code")
         draft_node.is_buggy = False
-        draft_node.metric = MetricValue(0.5, maximize=True)  # Add metric to make it a good node
+        draft_node.metric = MetricValue(
+            0.5, maximize=True
+        )  # Add metric to make it a good node
         agent.journal.append(draft_node)
-    
+
     # Mock random to avoid debug path
-    with patch('random.random', return_value=0.9):  # Greater than debug_prob
+    with patch("random.random", return_value=0.9):  # Greater than debug_prob
         selected_node = agent.search_policy()
         assert selected_node == node
+
 
 @pytest.mark.asyncio
 @patch("aide.agent.query")
 @patch("pathlib.Path.exists", return_value=True)  # Force submission file to appear
 async def test_parse_exec_result_success(
     mock_exists,  # mocks Path(...).exists()
-    mock_query,   # mocks aide.agent.query()
-    agent
+    mock_query,  # mocks aide.agent.query()
+    agent,
 ):
     node = Node(plan="test plan", code="test code")
     exec_result = ExecutionResult(
@@ -111,7 +120,7 @@ async def test_parse_exec_result_success(
         exec_time=0.1,
         exc_type=None,
         exc_info=None,
-        exc_stack=None
+        exc_stack=None,
     )
 
     # Create a proper SubmitReview object
@@ -133,17 +142,18 @@ async def test_parse_exec_result_success(
             True,  # has_submission check
         ]
     )
-    
+
     result_node = await agent.parse_exec_result(
         node=node,
         exec_result=exec_result,
         callback_manager=mock_callback_manager,
-        use_modal=False
+        use_modal=False,
     )
-    
+
     assert not result_node.is_buggy
     assert result_node.metric.value == 0.85
     assert result_node.analysis == "Execution successful"
+
 
 @pytest.mark.asyncio
 async def test_parse_exec_result_failure(agent):
@@ -153,10 +163,10 @@ async def test_parse_exec_result_failure(agent):
         exec_time=0.1,
         exc_type="ProcessLookupError",
         exc_info={"msg": "ProcessLookupError: [Errno 8] Exec format error"},
-        exc_stack=[]
+        exc_stack=[],
     )
-    
-    with patch('aide.agent.query') as mock_query:
+
+    with patch("aide.agent.query") as mock_query:
         # Create a proper SubmitReview object for failure case
         submit_review = SubmitReview(
             summary="Execution failed",
@@ -164,15 +174,16 @@ async def test_parse_exec_result_failure(agent):
             metric=None,
             has_csv_submission=False,
             lower_is_better=False,
-            missing_libraries=[]
+            missing_libraries=[],
         )
         mock_query.return_value = submit_review
-        
+
         result_node = await agent.parse_exec_result(node, exec_result)
-        
+
         assert result_node.is_buggy
         assert isinstance(result_node.metric, WorstMetricValue)
         assert result_node.analysis == "Execution failed"
+
 
 @pytest.mark.asyncio
 async def test_step_draft(agent):
@@ -180,22 +191,24 @@ async def test_step_draft(agent):
     mock_callback = AsyncMock()
     mock_callback_manager = MagicMock()
     mock_callback_manager.execute_callback = AsyncMock()
-    
-    with patch.object(agent, '_draft') as mock_draft, \
-         patch.object(agent, 'parse_exec_result') as mock_parse:
-        
+
+    with patch.object(agent, "_draft") as mock_draft, patch.object(
+        agent, "parse_exec_result"
+    ) as mock_parse:
+
         # Setup mock returns
         draft_node = Node(plan="draft plan", code="draft code")
         mock_draft.return_value = draft_node
         mock_parse.return_value = draft_node
-        
+
         # Execute step
         await agent.step(mock_callback, mock_callback_manager)
-        
+
         # Verify draft was called
         mock_draft.assert_called_once()
         assert agent.current_step == 1
         assert len(agent.journal.nodes) == 1
+
 
 @pytest.mark.asyncio
 async def test_step_debug(agent):
@@ -221,13 +234,20 @@ async def test_step_debug(agent):
     agent.journal.append(draft_node_2)
 
     # 2) Add a buggy leaf node (no children => leaf, parent=None => debug_depth=0).
-    buggy_node = Node(plan="buggy plan", code="buggy code", parent=None, children=set(), _term_out=["Error: example error"])
+    buggy_node = Node(
+        plan="buggy plan",
+        code="buggy code",
+        parent=None,
+        children=set(),
+        _term_out=["Error: example error"],
+    )
     buggy_node.is_buggy = True
     buggy_node.metric = WorstMetricValue()  # Add worst metric for buggy node
     agent.journal.append(buggy_node)
 
     # 3) Mock callback_manager to return a *real* ExecutionResult and create submission file
     mock_callback_manager = MagicMock()
+
     def execute_callback_side_effect(*args, **kwargs):
         if args[0] == "exec":
             # Create submission directory and file during "execution"
@@ -236,17 +256,19 @@ async def test_step_debug(agent):
                 f.write("id,prediction\n1,0.5\n")
             with open(submission_dir / "solution.py", "w") as f:
                 f.write("print('Hello World')")
-            
+
             return ExecutionResult(
                 term_out=["Execution successful"],
                 exec_time=0.1,
                 exc_type=None,
                 exc_info=None,
-                exc_stack=None
+                exc_stack=None,
             )
         return AsyncMock().return_value
 
-    mock_callback_manager.execute_callback = AsyncMock(side_effect=execute_callback_side_effect)
+    mock_callback_manager.execute_callback = AsyncMock(
+        side_effect=execute_callback_side_effect
+    )
 
     # 4) Create a real SubmitReview for the execution evaluation
     submit_review = SubmitReview(
@@ -255,13 +277,13 @@ async def test_step_debug(agent):
         metric=0.85,
         has_csv_submission=True,
         lower_is_better=False,
-        missing_libraries=[]
+        missing_libraries=[],
     )
 
     # 5) Mock query to return different responses for code generation vs execution evaluation
     def mock_query_side_effect(*args, **kwargs):
         # Check if functions argument is SubmitReview
-        if 'functions' in kwargs and kwargs['functions'] == SubmitReview:
+        if "functions" in kwargs and kwargs["functions"] == SubmitReview:
             return submit_review
         # Otherwise return debug code
         return "```python\nprint('Hello World')\n```"
@@ -269,30 +291,41 @@ async def test_step_debug(agent):
     # 6) Apply all patches
     with patch("aide.agent.query") as mock_query:
         mock_query.side_effect = mock_query_side_effect
-        
+
         # Force debug path
         with patch("random.random", return_value=0.1):
             await agent.step(exec_callback=None, callback_manager=mock_callback_manager)
 
     # Verify we have a new node appended (draft_node_1, draft_node_2, buggy_node, and now debug_node)
-    assert len(agent.journal.nodes) == 4, f"Expected 4 nodes, got {len(agent.journal.nodes)}"
+    assert (
+        len(agent.journal.nodes) == 4
+    ), f"Expected 4 nodes, got {len(agent.journal.nodes)}"
 
     new_node = agent.journal.nodes[-1]
-    assert new_node is not buggy_node, "Expected a newly created debug node, not the same old node."
+    assert (
+        new_node is not buggy_node
+    ), "Expected a newly created debug node, not the same old node."
     assert agent.current_step == 1, "Agent did not increment its step count."
 
     # The new debug node should not be buggy since we provided a successful execution
     assert not new_node.is_buggy, "Expected the debugged node to no longer be buggy."
-    assert isinstance(new_node.metric, MetricValue), "New node metric should be a real metric, not WorstMetricValue."
-    assert new_node.metric.value == 0.85, "Agent did not set the correct metric on the debugged node."
+    assert isinstance(
+        new_node.metric, MetricValue
+    ), "New node metric should be a real metric, not WorstMetricValue."
+    assert (
+        new_node.metric.value == 0.85
+    ), "Agent did not set the correct metric on the debugged node."
+
 
 @pytest.mark.asyncio
 @patch("aide.agent.query")
-@patch("pathlib.Path.exists", return_value=True)  # <-- Force the submission file to appear
+@patch(
+    "pathlib.Path.exists", return_value=True
+)  # <-- Force the submission file to appear
 async def test_parse_exec_result_missing_libraries(
     mock_exists,  # mocks Path(...).exists()
-    mock_query,   # mocks aide.agent.query()
-    agent
+    mock_query,  # mocks aide.agent.query()
+    agent,
 ):
     """
     If parse_exec_result sees missing libraries, it should install them once, re-execute,
@@ -305,7 +338,7 @@ async def test_parse_exec_result_missing_libraries(
         exec_time=0.1,
         exc_type=None,  # Or set to something like 'ModuleNotFoundError' if relevant
         exc_info=None,
-        exc_stack=[]
+        exc_stack=[],
     )
 
     # First "SubmitReview": says we are missing libs
@@ -334,13 +367,13 @@ async def test_parse_exec_result_missing_libraries(
     mock_callback_manager = MagicMock()
     mock_callback_manager.execute_callback = AsyncMock(
         side_effect=[
-            exec_result,    # first exec call
+            exec_result,  # first exec call
             ExecutionResult(  # second exec call after installation
                 term_out=["Training completed successfully"],
                 exec_time=0.1,
                 exc_type=None,
                 exc_info=None,
-                exc_stack=None
+                exc_stack=None,
             ),
         ]
     )
@@ -350,7 +383,7 @@ async def test_parse_exec_result_missing_libraries(
         node=node,
         exec_result=exec_result,
         callback_manager=mock_callback_manager,
-        use_modal=False
+        use_modal=False,
     )
 
     # Verify we tried installing the missing library
@@ -360,7 +393,10 @@ async def test_parse_exec_result_missing_libraries(
     # so the node should not be buggy, and metric should be set
     assert updated_node.is_buggy is False, "Node should be marked non-buggy"
     assert updated_node.metric.value == 0.85, "Metric should be 0.85"
-    assert updated_node.analysis == "It worked!", "Analysis should match the second SubmitReview"
+    assert (
+        updated_node.analysis == "It worked!"
+    ), "Analysis should match the second SubmitReview"
+
 
 @pytest.mark.asyncio
 async def test_action_agent_predict_next_action():
@@ -376,21 +412,22 @@ async def test_action_agent_predict_next_action():
 
         user_messages = [{"role": "user", "content": "What should I do next?"}]
         # Because ActionAgent.predict_next_action() is an async method in your code,
-        # we await it here. 
+        # we await it here.
         response = await agent.predict_next_action(user_messages)
-        
-        # The result is an ActionAgentLLMResponse or similar. 
+
+        # The result is an ActionAgentLLMResponse or similar.
         # We get the "draft" message from get_tool_message()
         tool_message = response.get_tool_message()
 
         assert tool_message == "draft"
         assert len(agent.message_history) == 2  # user msg + the LLM "draft" message
-        
+
         # Check that query was called
         mock_query.assert_called_once()
         _, kwargs = mock_query.call_args
         assert "functions" in kwargs
         assert len(kwargs["functions"]) == 4
+
 
 @pytest.mark.asyncio
 async def test_cache_best_node(agent):
@@ -399,6 +436,7 @@ async def test_cache_best_node(agent):
     # Create a callback manager and track all execute_callback calls
     mock_callback_manager = MagicMock()
     callback_results = []
+
     async def mock_execute_callback(*args, **kwargs):
         callback_results.append((args, kwargs))
         if args[0] == "exec":
@@ -407,22 +445,25 @@ async def test_cache_best_node(agent):
                 exec_time=0.1,
                 exc_type=None,
                 exc_info=None,
-                exc_stack=None
+                exc_stack=None,
             )
         return True
-    mock_callback_manager.execute_callback = AsyncMock(side_effect=mock_execute_callback)
+
+    mock_callback_manager.execute_callback = AsyncMock(
+        side_effect=mock_execute_callback
+    )
 
     # Setup first node as current best
     first_node = Node(plan="first plan", code="first code")
     first_node.is_buggy = False
-    first_node.metric = MetricValue(0.7, maximize=True) 
+    first_node.metric = MetricValue(0.7, maximize=True)
     agent.journal.append(first_node)
 
     # Set up mocks
-    with patch("aide.agent.query") as mock_query, \
-         patch("pathlib.Path.exists", return_value=True), \
-         patch.object(agent, '_draft') as mock_draft:
-        
+    with patch("aide.agent.query") as mock_query, patch(
+        "pathlib.Path.exists", return_value=True
+    ), patch.object(agent, "_draft") as mock_draft:
+
         # Setup query to return successful review
         mock_query.return_value = SubmitReview(
             summary="Success",
@@ -430,7 +471,7 @@ async def test_cache_best_node(agent):
             metric=0.8,  # Better than current best
             has_csv_submission=True,
             lower_is_better=False,
-            missing_libraries=[]
+            missing_libraries=[],
         )
 
         # Return new node from draft
@@ -441,14 +482,21 @@ async def test_cache_best_node(agent):
         await agent.step(callback_manager=mock_callback_manager)
 
         # Verify cache_best_node was called
-        assert any(args[0] == "cache_best_node" for args, _ in callback_results), "cache_best_node callback was not called"
-        
+        assert any(
+            args[0] == "cache_best_node" for args, _ in callback_results
+        ), "cache_best_node callback was not called"
+
         # Get the cache_best_node callback call and verify its argument
-        cache_call = next(call for call in callback_results if call[0][0] == "cache_best_node")
+        cache_call = next(
+            call for call in callback_results if call[0][0] == "cache_best_node"
+        )
         cached_node = cache_call[0][1]
         assert cached_node.metric.value == 0.8, "Wrong node was cached"
         assert cached_node.id == new_node.id, "Wrong node was cached"
 
-        assert agent.cfg.workspace_dir.joinpath("best_solution").exists(), "best_solution directory was not created"
-        assert agent.cfg.workspace_dir.joinpath("best_submission").exists(), "best_submission directory was not created"
-
+        assert agent.cfg.workspace_dir.joinpath(
+            "best_solution"
+        ).exists(), "best_solution directory was not created"
+        assert agent.cfg.workspace_dir.joinpath(
+            "best_submission"
+        ).exists(), "best_submission directory was not created"

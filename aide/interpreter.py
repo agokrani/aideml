@@ -23,8 +23,8 @@ import humanize
 import traceback
 from aide.journal import Node
 from aide.utils.execution_result import ExecutionResult
-logger = logging.getLogger("aide")
 
+logger = logging.getLogger("aide")
 
 
 def exception_summary(e, working_dir, exec_file_name, format_tb_ipython):
@@ -61,6 +61,7 @@ def exception_summary(e, working_dir, exec_file_name, format_tb_ipython):
     exc_stack = [(t.filename, t.lineno, t.name, t.line) for t in tb]
 
     return tb_str, e.__class__.__name__, exc_info, exc_stack
+
 
 class RedirectQueue:
     def __init__(self, queue):
@@ -300,12 +301,12 @@ class Interpreter:
 
     async def cache_best_node(self, node: Node):
         """Cache the best node's submission and solution files for local runtime."""
-        
+
         # Create best solution directory
         best_solution_dir = self.working_dir / "best_solution"
         best_solution_dir.mkdir(exist_ok=True, parents=True)
 
-        # Create best submission directory  
+        # Create best submission directory
         best_submission_dir = self.working_dir / "best_submission"
         best_submission_dir.mkdir(exist_ok=True, parents=True)
 

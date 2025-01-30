@@ -63,8 +63,8 @@ class CoPilot(Workflow):
             callback_manager.register_callback(
                 "install_dependecies", self.interpreter.install_missing_libraries
             )
-        
-        try: 
+
+        try:
             self.callback_manager.callbacks["cache_best_node"]
         except KeyError:
             callback_manager.register_callback(
@@ -202,7 +202,7 @@ class CoPilot(Workflow):
                 node=current_node,
                 exec_result=exec_result,
                 callback_manager=self.callback_manager,
-                use_modal=self.cfg.exec.use_modal
+                use_modal=self.cfg.exec.use_modal,
             )
 
             message = "Results from the current solution:\n\n"
@@ -250,8 +250,7 @@ class CoPilot(Workflow):
                         "tool_output", f"Node {current_node.id} is the best node so far"
                     )
                     await self.callback_manager.execute_callback(
-                        "cache_best_node",
-                        current_node
+                        "cache_best_node", current_node
                     )
                 else:
                     logger.info(f"Node {current_node.id} is not the best node")

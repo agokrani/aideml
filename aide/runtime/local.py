@@ -45,7 +45,7 @@ class LocalRuntime(Runtime):
         if reset_session:
             if self.process is not None:
                 # terminate and clean up previous process
-                try: 
+                try:
                     await self.cleanup_session()
                 except ProcessLookupError:
                     logger.info("Process already terminated, skipping cleanup.")
@@ -70,6 +70,7 @@ class LocalRuntime(Runtime):
                 cwd=self.working_dir,
             )
             try:
+
                 async def read_stream(stream, is_stderr=False):
                     while True:
                         line = await stream.readline()
@@ -82,12 +83,14 @@ class LocalRuntime(Runtime):
                         output.append(decoded_line + "\n")
 
                 stdout_task = asyncio.create_task(read_stream(self.process.stdout))
-                stderr_task = asyncio.create_task(read_stream(self.process.stderr, True))
-                
+                stderr_task = asyncio.create_task(
+                    read_stream(self.process.stderr, True)
+                )
+
                 await asyncio.wait_for(self.process.wait(), timeout=self.timeout)
                 await stdout_task
                 await stderr_task
-                
+
                 exec_time = time.time() - start_time
                 return ExecutionResult("".join(output), exec_time, None, None, None)
 
@@ -110,12 +113,12 @@ class LocalRuntime(Runtime):
 
     async def cache_best_node(self, node: Node):
         """Cache the best node's submission and solution files for local runtime."""
-        
+
         # Create best solution directory
         best_solution_dir = self.working_dir / "best_solution"
         best_solution_dir.mkdir(exist_ok=True, parents=True)
 
-        # Create best submission directory  
+        # Create best submission directory
         best_submission_dir = self.working_dir / "best_submission"
         best_submission_dir.mkdir(exist_ok=True, parents=True)
 

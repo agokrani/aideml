@@ -155,20 +155,22 @@ class ModalRuntime(Runtime):
 
     async def cache_best_node(self, node: Node):
         """Cache the best node's submission and solution files for modal runtime."""
-        workspace_dir = Path(workspace_dir)
-
         # Create best solution and submission directories in sandboxed env
         best_solution_dir = f"{self.modal_working_dir}/best_solution"
         best_submission_dir = f"{self.modal_working_dir}/best_submission"
-        
+
         self.process.mkdir(best_solution_dir, exist_ok=True)
         self.process.mkdir(best_submission_dir, exist_ok=True)
 
         # Copy submission file using modal sandbox
-        self.process.exec("cp", f"{self.modal_working_dir}/submission/submission.csv", best_submission_dir)
+        self.process.exec(
+            "cp",
+            f"{self.modal_working_dir}/submission/submission.csv",
+            best_submission_dir,
+        )
 
         # Save solution code
-        f = self.process.open(f"{best_solution_dir}/solution.py", "w") 
+        f = self.process.open(f"{best_solution_dir}/solution.py", "w")
         f.write(node.code)
         f.close()
 
