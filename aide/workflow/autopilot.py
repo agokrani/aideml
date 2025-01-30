@@ -1,16 +1,20 @@
-from aide.callbacks.manager import CallbackManager
-from aide.workflow.base import Workflow
+import logging
 from aide.agent import Agent
-from aide.interpreter import Interpreter
 from aide.utils.config import Config
 from aide.utils.config import save_run
+from aide.workflow.base import Workflow
+from aide.runtime.runtime import Runtime
+from aide.runtime.modal import ModalRuntime
+from aide.callbacks.manager import CallbackManager
+
+logger = logging.getLogger("aide")
 
 
 class AutoPilot(Workflow):
     def __init__(
         self,
         agent: Agent,
-        interpreter: Interpreter,
+        interpreter: Runtime,
         cfg: Config,
         callback_manager: CallbackManager | None = None,
     ):
@@ -27,6 +31,37 @@ class AutoPilot(Workflow):
         except KeyError:
             self.callback_manager.register_callback("exec", self.interpreter.run)
 
+        if self.cfg.exec.use_modal:
+            assert isinstance(self.interpreter, ModalRuntime)
+            try:
+                self.callback_manager.callbacks["has_submission"]
+            except KeyError:
+                self.callback_manager.register_callback(
+                    "has_submission", self.interpreter.has_submission
+                )
+
+            try:
+                self.callback_manager.callbacks["remove_submission_directory"]
+            except KeyError:
+                callback_manager.register_callback(
+                    "remove_submission_directory",
+                    self.interpreter.remove_previous_submissions_directory,
+                )
+
+        # outside of If block on purpose because both local and modal runtimes need to install dependencies
+        try:
+            self.callback_manager.callbacks["install_dependencies"]
+        except KeyError:
+            callback_manager.register_callback(
+                "install_dependencies", self.interpreter.install_missing_libraries
+            )
+        try:
+            self.callback_manager.callbacks["cache_best_node"]
+        except KeyError:
+            callback_manager.register_callback(
+                "cache_best_node", self.interpreter.cache_best_node
+            )
+
     async def run(self):
         global_step = len(self.journal)
         while global_step < self.cfg.agent.steps:
@@ -37,4 +72,7 @@ class AutoPilot(Workflow):
             global_step = len(self.journal)
             await self.callback_manager.execute_callback("tool_output")
         # Cleanup the interpreter session
-        self.interpreter.cleanup_session()
+        try:
+            await self.interpreter.cleanup_session()
+        except ProcessLookupError:
+            logger.info("Process already terminated, skipping cleanup.")

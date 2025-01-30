@@ -6,13 +6,13 @@ import shutil
 
 import argparse
 
+
 from . import backend
 
 from .agent import Agent
 from .interpreter import Interpreter
 from .journal import Journal, Node
 from .journal2report import journal2report
-from omegaconf import OmegaConf
 from rich.columns import Columns
 from rich.console import Group
 from rich.live import Live
@@ -29,6 +29,8 @@ from rich.text import Text
 from rich.status import Status
 from rich.tree import Tree
 from .utils.config import load_task_desc, prep_agent_workspace, save_run, load_cfg
+
+from aide.callbacks.manager import CallbackManager
 
 
 class VerboseFilter(logging.Filter):
@@ -154,7 +156,10 @@ async def run():
     )
 
     interpreter = Interpreter(
-        cfg.workspace_dir, **OmegaConf.to_container(cfg.exec)  # type: ignore
+        cfg.workspace_dir,
+        timeout=cfg.exec.timeout,
+        format_tb_ipython=cfg.exec.format_tb_ipython,
+        agent_file_name=cfg.exec.agent_file_name,
     )
 
     global_step = len(journal)
@@ -212,9 +217,17 @@ async def run():
             subtitle="Press [b]Ctrl+C[/b] to stop the run",
         )
 
+    callback_manager = CallbackManager()
+    callback_manager.register_callback(
+        "install_dependencies", interpreter.install_missing_libraries
+    )
+    callback_manager.register_callback("cache_best_node", interpreter.cache_best_node)
+
     if cfg.debug:
         while global_step < cfg.agent.steps:
-            await agent.step(exec_callback=exec_callback)
+            await agent.step(
+                exec_callback=exec_callback, callback_manager=callback_manager
+            )
             # on the last step, print the tree
             if global_step == cfg.agent.steps - 1:
                 logger.info(journal_to_string_tree(journal))
@@ -227,7 +240,9 @@ async def run():
             screen=True,
         ) as live:
             while global_step < cfg.agent.steps:
-                await agent.step(exec_callback=exec_callback)
+                await agent.step(
+                    exec_callback=exec_callback, callback_manager=callback_manager
+                )
                 # on the last step, print the tree
                 if global_step == cfg.agent.steps - 1:
                     logger.info(journal_to_string_tree(journal))

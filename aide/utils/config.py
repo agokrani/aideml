@@ -6,16 +6,19 @@ from pathlib import Path
 from typing import Hashable, cast
 
 import coolname
+
 import rich
 from omegaconf import OmegaConf
 from rich.syntax import Syntax
 import shutup
 import logging
+from grpclib import GRPCError
 
 from aide.journal import Journal, filter_journal
 
 from . import tree_export
 from . import copytree, preproc_data, serialize
+import modal
 
 shutup.mute_warnings()
 logger = logging.getLogger("aide")
@@ -67,6 +70,10 @@ class ExecConfig:
     timeout: int
     agent_file_name: str
     format_tb_ipython: bool
+    use_modal: bool | None = None
+    gpu: str | None = None
+    gpu_size: str | None = None
+    gpu_count: str | None = None
 
 
 @dataclass
@@ -93,6 +100,8 @@ class Config(Hashable):
     generate_report: bool
     report: StageConfig
     agent: AgentConfig
+
+    task_id: str | None = None
 
 
 def _get_next_logindex(dir: Path) -> int:
@@ -200,6 +209,25 @@ def prep_agent_workspace(cfg: Config):
     (cfg.workspace_dir / "submission").mkdir(parents=True, exist_ok=True)
 
     copytree(cfg.data_dir, cfg.workspace_dir / "input", use_symlinks=not cfg.copy_data)
+
+    if cfg.exec.use_modal:
+        assert cfg.task_id is not None, "Task ID must be provided for Modal runtime"
+        volume = modal.Volume.from_name("agent-volume", create_if_missing=True)
+        task_path = f"tasks/{cfg.task_id}"
+        dirs = []
+
+        try:
+            dirs = volume.listdir("/tasks")
+            dirs = [d.path.split("/")[1] for d in dirs]
+        except GRPCError:
+            with volume.batch_upload() as batch:
+                batch.put_directory(cfg.data_dir, task_path)
+            dirs.append(cfg.task_id)
+
+        if cfg.task_id not in dirs:
+            with volume.batch_upload() as batch:
+                batch.put_directory(cfg.data_dir, task_path)
+
     if cfg.preprocess_data:
         preproc_data(cfg.workspace_dir / "input")
 
