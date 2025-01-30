@@ -4,8 +4,9 @@ import modal
 import logging
 import humanize
 from pathlib import Path
-from aide.interpreter import ExecutionResult
+from aide.utils.execution_result import ExecutionResult
 from aide.runtime.runtime import Runtime
+from aide.journal import Node
 
 logger = logging.getLogger("aide")
 
@@ -151,6 +152,30 @@ class ModalRuntime(Runtime):
         if "submission.csv" in self.process.ls("submission"):
             return True
         return False
+
+    async def cache_best_node(self, node: Node):
+        """Cache the best node's submission and solution files for modal runtime."""
+        workspace_dir = Path(workspace_dir)
+
+        # Create best solution and submission directories in sandboxed env
+        best_solution_dir = f"{self.modal_working_dir}/best_solution"
+        best_submission_dir = f"{self.modal_working_dir}/best_submission"
+        
+        self.process.mkdir(best_solution_dir, exist_ok=True)
+        self.process.mkdir(best_submission_dir, exist_ok=True)
+
+        # Copy submission file using modal sandbox
+        self.process.exec("cp", f"{self.modal_working_dir}/submission/submission.csv", best_submission_dir)
+
+        # Save solution code
+        f = self.process.open(f"{best_solution_dir}/solution.py", "w") 
+        f.write(node.code)
+        f.close()
+
+        # Save node ID
+        f = self.process.open(f"{best_solution_dir}/node_id.txt", "w")
+        f.write(str(node.id))
+        f.close()
 
     async def install_missing_libraries(self, missing_libraries: list[str]):
         for library in missing_libraries:

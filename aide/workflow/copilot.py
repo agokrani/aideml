@@ -3,7 +3,6 @@ from omegaconf import Node
 from pydantic import BaseModel
 from aide.workflow.base import Workflow
 from aide.runtime.runtime import Runtime
-from aide.journal import cache_best_node
 from aide.agent import Agent, ActionAgent
 from aide.runtime.modal import ModalRuntime
 from aide.utils.metric import WorstMetricValue
@@ -63,6 +62,13 @@ class CoPilot(Workflow):
         except KeyError:
             callback_manager.register_callback(
                 "install_dependecies", self.interpreter.install_missing_libraries
+            )
+        
+        try: 
+            self.callback_manager.callbacks["cache_best_node"]
+        except KeyError:
+            callback_manager.register_callback(
+                "cache_best_node", self.interpreter.cache_best_node
             )
 
     #     # Register signal handlers
@@ -196,6 +202,7 @@ class CoPilot(Workflow):
                 node=current_node,
                 exec_result=exec_result,
                 callback_manager=self.callback_manager,
+                use_modal=self.cfg.exec.use_modal
             )
 
             message = "Results from the current solution:\n\n"
@@ -242,8 +249,9 @@ class CoPilot(Workflow):
                     await self.callback_manager.execute_callback(
                         "tool_output", f"Node {current_node.id} is the best node so far"
                     )
-                    cache_best_node(
-                        current_node, self.cfg.workspace_dir, self.cfg.exec.use_modal
+                    await self.callback_manager.execute_callback(
+                        "cache_best_node",
+                        current_node
                     )
                 else:
                     logger.info(f"Node {current_node.id} is not the best node")
@@ -277,5 +285,3 @@ class CoPilot(Workflow):
         await self.callback_manager.execute_callback(
             "tool_output", f"code:\n{result_node.code}\n\n"
         )
-
-        return result_node

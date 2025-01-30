@@ -1,17 +1,19 @@
+import logging
 from aide.agent import Agent
 from aide.utils.config import Config
 from aide.utils.config import save_run
 from aide.workflow.base import Workflow
-from aide.interpreter import Interpreter
+from aide.runtime.runtime import Runtime
 from aide.runtime.modal import ModalRuntime
 from aide.callbacks.manager import CallbackManager
 
+logger = logging.getLogger("aide")
 
 class AutoPilot(Workflow):
     def __init__(
         self,
         agent: Agent,
-        interpreter: Interpreter,
+        interpreter: Runtime,
         cfg: Config,
         callback_manager: CallbackManager | None = None,
     ):
@@ -50,7 +52,13 @@ class AutoPilot(Workflow):
             self.callback_manager.callbacks["install_dependencies"]
         except KeyError:
             callback_manager.register_callback(
-                "install_dependecies", self.interpreter.install_missing_libraries
+                "install_dependencies", self.interpreter.install_missing_libraries
+            )
+        try: 
+            self.callback_manager.callbacks["cache_best_node"]
+        except KeyError:
+            callback_manager.register_callback(
+                "cache_best_node", self.interpreter.cache_best_node
             )
 
     async def run(self):
@@ -63,4 +71,7 @@ class AutoPilot(Workflow):
             global_step = len(self.journal)
             await self.callback_manager.execute_callback("tool_output")
         # Cleanup the interpreter session
-        await self.interpreter.cleanup_session()
+        try:
+            await self.interpreter.cleanup_session()
+        except ProcessLookupError:
+            logger.info("Process already terminated, skipping cleanup.")

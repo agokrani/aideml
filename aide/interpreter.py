@@ -7,34 +7,24 @@ Supports:
 """
 
 import logging
+import shutil
+import asyncio
 import os
 import queue
 import signal
 import sys
 import time
-import traceback
-from dataclasses import dataclass
+
+
 from multiprocessing import Process, Queue
 from pathlib import Path
 
 import humanize
-from dataclasses_json import DataClassJsonMixin
-
+import traceback
+from aide.journal import Node
+from aide.utils.execution_result import ExecutionResult
 logger = logging.getLogger("aide")
 
-
-@dataclass
-class ExecutionResult(DataClassJsonMixin):
-    """
-    Result of executing a code snippet in the interpreter.
-    Contains the output, execution time, and exception information.
-    """
-
-    term_out: list[str]
-    exec_time: float
-    exc_type: str | None
-    exc_info: dict | None = None
-    exc_stack: list[tuple] | None = None
 
 
 def exception_summary(e, working_dir, exec_file_name, format_tb_ipython):
@@ -71,7 +61,6 @@ def exception_summary(e, working_dir, exec_file_name, format_tb_ipython):
     exc_stack = [(t.filename, t.lineno, t.name, t.line) for t in tb]
 
     return tb_str, e.__class__.__name__, exc_info, exc_stack
-
 
 class RedirectQueue:
     def __init__(self, queue):
@@ -308,3 +297,56 @@ class Interpreter:
                 f"Execution time: {humanize.naturaldelta(exec_time)} seconds (time limit is {humanize.naturaldelta(self.timeout)})."
             )
         return ExecutionResult(output, exec_time, e_cls_name, exc_info, exc_stack)
+
+    async def cache_best_node(self, node: Node):
+        """Cache the best node's submission and solution files for local runtime."""
+        
+        # Create best solution directory
+        best_solution_dir = self.working_dir / "best_solution"
+        best_solution_dir.mkdir(exist_ok=True, parents=True)
+
+        # Create best submission directory  
+        best_submission_dir = self.working_dir / "best_submission"
+        best_submission_dir.mkdir(exist_ok=True, parents=True)
+
+        # Copy submission file
+        shutil.copy(
+            self.working_dir / "submission" / "submission.csv",
+            best_submission_dir,
+        )
+
+        # Save solution code
+        with open(best_solution_dir / "solution.py", "w") as f:
+            f.write(node.code)
+
+        # Save node ID
+        with open(best_solution_dir / "node_id.txt", "w") as f:
+            f.write(str(node.id))
+
+    async def install_missing_libraries(self, missing_libraries: list[str]) -> None:
+        """
+        Installs missing libraries asynchronously, one by one, using pip.
+
+        :param missing_libraries: A list of library names to install.
+        :raises Exception: If any library fails to install.
+        """
+        import sys
+
+        for library in missing_libraries:
+            logger.info(f"Installing missing library: {library}")
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                library,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+            if process.returncode != 0:
+                error_msg = stderr.decode()
+                logger.error(f"Failed to install {library}. Error: {error_msg}")
+                raise Exception(f"Failed to install {library}: {error_msg}")
+            else:
+                logger.info(f"Successfully installed {library}.")

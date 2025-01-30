@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import click
 import aide
@@ -149,9 +150,9 @@ def start(mode, config_path=None):
 
             stage_start("initial solution", "executing ", color="magenta")
             exec_result = loop.run_until_complete(interpreter.run(code=node.code))
-            callback_manager = None
+            callback_manager = CallbackManager()
             if cfg.exec.use_modal:
-                callback_manager = CallbackManager()
+                
                 assert isinstance(interpreter, ModalRuntime)
                 callback_manager.register_callback(
                     "has_submission", interpreter.has_submission
@@ -224,9 +225,13 @@ def start(mode, config_path=None):
                 subtitle="Press [b]Ctrl+C[/b] to stop the run",
             )
 
-        def exec_callback(*args, **kwargs):
+        async def exec_callback(*args, **kwargs):
             status.update("[magenta]Executing code...")
-            res = interpreter.run(*args, **kwargs)
+            # TODO: Fix this to await the result for execution
+            if inspect.iscoroutinefunction(interpreter.run):
+                res = await interpreter.run(*args, **kwargs)
+            else:
+                res = interpreter.run(*args, **kwargs)
             return res
 
         def stage_start(stage_name, message=None):
@@ -252,9 +257,13 @@ def start(mode, config_path=None):
             )
 
         callback_manager.register_callback(
-            "install_dependecies", interpreter.install_missing_libraries
+            "install_dependencies", interpreter.install_missing_libraries
         )
 
+        callback_manager.register_callback(
+            "cache_best_node", interpreter.cache_best_node
+        )
+        
         autopilot = AutoPilot(agent, interpreter, cfg, callback_manager)
 
         with Live(generate_display(), refresh_per_second=16, screen=True) as live:
@@ -264,6 +273,10 @@ def start(mode, config_path=None):
 
             autopilot.callback_manager.register_callback("tool_output", update_display)
             asyncio.run(autopilot.run())
+        # def update_display(*args, **kwargs):
+        #     pass
+        # autopilot.callback_manager.register_callback("tool_output", update_display)
+        # asyncio.run(autopilot.run())
 
     elif mode == "copilot":
         console.print("Starting copilot run...\n")
@@ -292,6 +305,9 @@ def start(mode, config_path=None):
 
         callback_manager.register_callback(
             "install_dependecies", interpreter.install_missing_libraries
+        )
+        callback_manager.register_callback(
+            "cache_best_node", interpreter.cache_best_node
         )
 
         copilot = CoPilot(agent, interpreter, cfg, callback_manager)

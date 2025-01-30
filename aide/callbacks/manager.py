@@ -1,6 +1,8 @@
 import inspect
 from typing import Callable, Any, Dict
+import logging
 
+logger = logging.getLogger("aide")
 
 class CallbackManager:
     def __init__(self):
@@ -34,6 +36,7 @@ class CallbackManager:
         Args:
             name (str): The name of the callback to execute.
             *args, **kwargs: Arguments to pass to the callback.
+            supress_errors (bool): If True, exceptions will be caught and logged instead of being raised.
 
         Returns:
             Any: The result of the callback, if it exists.
@@ -45,9 +48,16 @@ class CallbackManager:
                 return None
 
         callback = self.callbacks[name]
-        if inspect.iscoroutinefunction(callback):
-            # If the callback is async, await it
-            return await callback(*args, **kwargs)
-        else:
-            # If the callback is sync, execute it directly
-            return callback(*args, **kwargs)
+        try:
+            if inspect.iscoroutinefunction(callback):
+                # If the callback is async, await it
+                return await callback(*args, **kwargs)
+            else:
+                # If the callback is sync, execute it directly
+                return callback(*args, **kwargs)
+        except Exception as e:
+            if supress_errors:
+                logger.error(f"Error executing callback '{name}': {str(e)}", extra={"verbose": True})
+                return None
+            raise
+            

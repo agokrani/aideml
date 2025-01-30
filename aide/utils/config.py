@@ -6,11 +6,13 @@ from pathlib import Path
 from typing import Hashable, cast
 
 import coolname
+
 import rich
 from omegaconf import OmegaConf
 from rich.syntax import Syntax
 import shutup
 import logging
+from grpclib import GRPCError
 
 from aide.journal import Journal, filter_journal
 
@@ -213,10 +215,11 @@ def prep_agent_workspace(cfg: Config):
         volume = modal.Volume.from_name("agent-volume", create_if_missing=True)
         task_path = f"tasks/{cfg.task_id}"
         dirs = []
+        
         try:
             dirs = volume.listdir("/tasks")
             dirs = [d.path.split("/")[1] for d in dirs]
-        except FileNotFoundError:
+        except GRPCError as e:
             with volume.batch_upload() as batch:
                 batch.put_directory(cfg.data_dir, task_path)
             dirs.append(cfg.task_id)

@@ -7,13 +7,12 @@ import humanize
 from aide.function import SearchArxiv, SearchPapersWithCode
 from aide.actions import Debug, Draft, Improve, Finish, SubmitReview
 from .backend import query
-from .interpreter import ExecutionResult
+from .utils.execution_result import ExecutionResult
 from .journal import Journal, Node
 from .utils import data_preview
 from .utils.config import Config
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import extract_code, extract_text_up_to_code, wrap_code
-from .journal import cache_best_node
 
 logger = logging.getLogger("aide")
 
@@ -431,6 +430,7 @@ class Agent:
     # For backward compatibility, need to change once the pipeline is verified
     async def step(self, exec_callback: ExecCallbackType = None, callback_manager=None):
         # clear the submission dir from previous steps
+        
         if not self.cfg.exec.use_modal:
             shutil.rmtree(self.cfg.workspace_dir / "submission", ignore_errors=True)
             (self.cfg.workspace_dir / "submission").mkdir(exist_ok=True)
@@ -473,14 +473,13 @@ class Agent:
             exec_result = await callback_manager.execute_callback(
                 "exec", result_node.code
             )
-
-        result_node = self.parse_exec_result(
+        result_node = await self.parse_exec_result(
             node=result_node,
             exec_result=exec_result,
             exec_callback=exec_callback,
             callback_manager=callback_manager,
+            use_modal=self.cfg.exec.use_modal
         )
-
         # TODO: Fix this to check submission when using modal. Also verify the cache_best_node function
         # handle final cases where we missed buggy nodes somehow
         if not result_node.is_buggy:
@@ -509,10 +508,9 @@ class Agent:
         if best_node is not None:
             if best_node.id == result_node.id:
                 logger.info(f"Node {result_node.id} is the best node so far")
-                cache_best_node(
-                    result_node,
-                    self.cfg.workspace_dir,
-                    use_modal=self.cfg.exec.use_modal,
+                await callback_manager.execute_callback(
+                    "cache_best_node",
+                    result_node
                 )
             else:
                 logger.info(f"Node {result_node.id} is not the best node")
@@ -530,7 +528,6 @@ class Agent:
         use_modal=False,
     ) -> Node:
         logger.info(f"Agent is parsing execution results for node {node.id}")
-
         node.absorb_exec_result(exec_result)
 
         introduction = (
@@ -594,20 +591,16 @@ class Agent:
                     callback_manager=callback_manager,
                     attempts=attempts + 1,
                     max_attempts=max_attempts,
+                    use_modal=use_modal
                 )
             else:
                 logger.info(
                     "Maximum attempts reached while trying to install missing libraries"
                 )
-        else:
-            logger.info(
-                "Maximun attempts reached while trying to install missing libraries"
-            )
-
+        
         # if the metric isn't a float then fill the metric with the worst metric
         if not isinstance(response.metric, float):
             response.metric = None
-
         # do an extra check, to catch cases where judge fails
         if use_modal:
             has_csv_submission = await callback_manager.execute_callback(

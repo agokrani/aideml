@@ -6,6 +6,7 @@ import shutil
 
 import argparse
 
+
 from . import backend
 
 from .agent import Agent
@@ -29,6 +30,7 @@ from rich.status import Status
 from rich.tree import Tree
 from .utils.config import load_task_desc, prep_agent_workspace, save_run, load_cfg
 
+from aide.callbacks.manager import CallbackManager
 
 class VerboseFilter(logging.Filter):
     """
@@ -213,10 +215,14 @@ async def run():
             title=f'[b]AIDE is working on experiment: [bold green]"{cfg.exp_name}[/b]"',
             subtitle="Press [b]Ctrl+C[/b] to stop the run",
         )
+    
+    callback_manager = CallbackManager()
+    callback_manager.register_callback("install_dependencies", interpreter.install_missing_libraries)
+    callback_manager.register_callback("cache_best_node", interpreter.cache_best_node)
 
     if cfg.debug:
         while global_step < cfg.agent.steps:
-            await agent.step(exec_callback=exec_callback)
+            await agent.step(exec_callback=exec_callback, callback_manager=callback_manager)
             # on the last step, print the tree
             if global_step == cfg.agent.steps - 1:
                 logger.info(journal_to_string_tree(journal))
@@ -229,7 +235,7 @@ async def run():
             screen=True,
         ) as live:
             while global_step < cfg.agent.steps:
-                await agent.step(exec_callback=exec_callback)
+                await agent.step(exec_callback=exec_callback, callback_manager=callback_manager)
                 # on the last step, print the tree
                 if global_step == cfg.agent.steps - 1:
                     logger.info(journal_to_string_tree(journal))
