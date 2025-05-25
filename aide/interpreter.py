@@ -18,6 +18,7 @@ import time
 
 from multiprocessing import Process, Queue
 from pathlib import Path
+from typing import Any
 
 import humanize
 import traceback
@@ -25,7 +26,6 @@ from aide.journal import Node
 from aide.utils.execution_result import ExecutionResult
 
 logger = logging.getLogger("aide")
-
 
 def exception_summary(e, working_dir, exec_file_name, format_tb_ipython):
     """Generates a string that summarizes an exception and its stack trace (either in standard python repl or in IPython format)."""
@@ -81,6 +81,10 @@ class Interpreter:
         timeout: int = 3600,
         format_tb_ipython: bool = False,
         agent_file_name: str = "runfile.py",
+        use_modal: bool = None, # Added this parameter
+        gpu: Any = None,        # Added this parameter
+        gpu_size: str = None,   # Added this parameter
+        gpu_count: int = None,  # Added this parameter
     ):
         """
         Simulates a standalone Python REPL with an execution time limit.
