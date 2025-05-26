@@ -13,6 +13,7 @@ from .utils import data_preview
 from .utils.config import Config
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import extract_code, extract_text_up_to_code, wrap_code
+from .utils.util import load_prompt
 
 logger = logging.getLogger("aide")
 
@@ -206,6 +207,75 @@ class Agent:
         logger.info("Final plan + code extraction attempt failed, giving up...")
         return "", completion_text  # type: ignore
 
+    def plan_query(self, stage: str, user_messages=None, retries=3, **variables) -> str:
+        """Generate a natural language plan using external prompt configuration."""
+        for attempt in range(retries):
+            try:
+                # Load prompt from external files
+                prompt = load_prompt(stage, "planning", obfuscate=self.acfg.obfuscate, **variables)
+                
+                # If prompt loading failed (no files), return empty plan
+                if not prompt:
+                    logger.warning(f"No prompt configuration found for {stage}/planning, returning empty plan")
+                    return ""
+                
+                plan_text = query(
+                    system_message=prompt,
+                    user_messages=user_messages,
+                    model=self.acfg.code.model,
+                    temperature=self.acfg.code.temp,
+                    convert_system_to_user=self.acfg.convert_system_to_user,
+                )
+                
+                # Validate that we got a reasonable plan
+                if plan_text and len(plan_text.strip()) > 10:
+                    return plan_text.strip()
+                
+                logger.info(f"Plan generation failed on attempt {attempt + 1}, retrying...")
+                
+            except Exception as e:
+                logger.warning(f"Plan query failed on attempt {attempt + 1}: {e}")
+                
+        logger.info("Final plan generation attempt failed, returning empty plan")
+        return ""
+
+    def code_query(self, stage: str, plan: str, user_messages=None, retries=3, **variables) -> str:
+        """Generate code implementing the provided plan using external prompt configuration."""
+        for attempt in range(retries):
+            try:
+                # Add plan to variables
+                variables["plan"] = plan
+                
+                # Load prompt from external files
+                prompt = load_prompt(stage, "coding", obfuscate=self.acfg.obfuscate, **variables)
+                
+                # If prompt loading failed (no files), fall back to old behavior
+                if not prompt:
+                    logger.warning(f"No prompt configuration found for {stage}/coding, using fallback")
+                    return ""
+                
+                completion_text = query(
+                    system_message=prompt,
+                    user_messages=user_messages,
+                    model=self.acfg.code.model,
+                    temperature=self.acfg.code.temp,
+                    convert_system_to_user=self.acfg.convert_system_to_user,
+                )
+                
+                # Extract code from response
+                code = extract_code(completion_text)
+                
+                if code:
+                    return code
+                
+                logger.info(f"Code extraction failed on attempt {attempt + 1}, retrying...")
+                
+            except Exception as e:
+                logger.warning(f"Code query failed on attempt {attempt + 1}: {e}")
+                
+        logger.info("Final code generation attempt failed, returning completion text")
+        return completion_text if 'completion_text' in locals() else ""
+
     def _perform_initial_research(self):
         introduction = (
             "You are an Machine learning expert tasked with advising on the best ML task/model/algorithm to use.\n"
@@ -299,6 +369,30 @@ class Agent:
 
     def _draft(self, user_messages: List | None = None) -> Node:
         advice = self._advisor()
+        
+        # Prepare variables for external prompts
+        variables = {
+            "task_desc": self.task_desc,
+            "advice": advice,
+            "memory": self.journal.generate_summary(),
+            "data_preview": self.data_preview if self.acfg.data_preview else "",
+            # Dynamic implementation guideline variables
+            "time_remaining": format_time(self.acfg.time_limit - (time.time() - self.start_time)),
+            "steps_remaining": str(self.acfg.steps - self.current_step),
+            "exec_timeout": humanize.naturaldelta(int(min(self.cfg.exec.timeout, self.acfg.time_limit - (time.time() - self.start_time)))),
+        }
+        
+        # Try new two-phase approach first
+        plan = self.plan_query("draft", user_messages, **variables)
+        if plan:
+            code = self.code_query("draft", plan, user_messages, **variables)
+            if code:
+                new_node = Node(plan=plan, code=code)
+                logger.info(f"Drafted new node {new_node.id} using new prompt system")
+                return new_node
+        
+        # Fallback to old behavior if new system fails
+        logger.warning("New prompt system failed, falling back to old behavior")
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
             "In order to win this competition, you need to come up with an excellent and creative plan "
@@ -337,10 +431,32 @@ class Agent:
         plan, code = self.plan_and_code_query(prompt, user_messages)
 
         new_node = Node(plan=plan, code=code)
-        logger.info(f"Drafted new node {new_node.id}")
+        logger.info(f"Drafted new node {new_node.id} using fallback system")
         return new_node
 
     def _improve(self, parent_node: Node, user_messages: List | None = None) -> Node:
+        # Prepare variables for external prompts
+        variables = {
+            "task_desc": self.task_desc,
+            "memory": self.journal.generate_summary(),
+            "previous_solution": wrap_code(parent_node.code),
+            # Dynamic implementation guideline variables
+            "time_remaining": format_time(self.acfg.time_limit - (time.time() - self.start_time)),
+            "steps_remaining": str(self.acfg.steps - self.current_step),
+            "exec_timeout": humanize.naturaldelta(int(min(self.cfg.exec.timeout, self.acfg.time_limit - (time.time() - self.start_time)))),
+        }
+        
+        # Try new two-phase approach first
+        plan = self.plan_query("improve", user_messages, **variables)
+        if plan:
+            code = self.code_query("improve", plan, user_messages, **variables)
+            if code:
+                new_node = Node(plan=plan, code=code, parent=parent_node)
+                logger.info(f"Improved node {parent_node.id} to create new node {new_node.id} using new prompt system")
+                return new_node
+        
+        # Fallback to old behavior if new system fails
+        logger.warning("New prompt system failed for improve, falling back to old behavior")
         introduction = (
             "You are a Kaggle grandmaster attending a competition. You are provided with a previously developed "
             "solution below and should improve it in order to further increase the (test time) performance. "
@@ -379,10 +495,33 @@ class Agent:
 
         plan, code = self.plan_and_code_query(prompt, user_messages)
         new_node = Node(plan=plan, code=code, parent=parent_node)
-        logger.info(f"Improved node {parent_node.id} to create new node {new_node.id}")
+        logger.info(f"Improved node {parent_node.id} to create new node {new_node.id} using fallback system")
         return new_node
 
     def _debug(self, parent_node: Node, user_messages: List | None = None) -> Node:
+        # Prepare variables for external prompts
+        variables = {
+            "task_desc": self.task_desc,
+            "buggy_code": wrap_code(parent_node.code),
+            "execution_output": wrap_code(parent_node.term_out, lang=""),
+            "data_preview": self.data_preview if self.acfg.data_preview else "",
+            # Dynamic implementation guideline variables
+            "time_remaining": format_time(self.acfg.time_limit - (time.time() - self.start_time)),
+            "steps_remaining": str(self.acfg.steps - self.current_step),
+            "exec_timeout": humanize.naturaldelta(int(min(self.cfg.exec.timeout, self.acfg.time_limit - (time.time() - self.start_time)))),
+        }
+        
+        # Try new two-phase approach first
+        plan = self.plan_query("debug", user_messages, **variables)
+        if plan:
+            code = self.code_query("debug", plan, user_messages, **variables)
+            if code:
+                new_node = Node(plan=plan, code=code, parent=parent_node)
+                logger.info(f"Debugged node {parent_node.id} to create new node {new_node.id} using new prompt system")
+                return new_node
+        
+        # Fallback to old behavior if new system fails
+        logger.warning("New prompt system failed for debug, falling back to old behavior")
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
             "Your previous solution had a bug and/or did not produce a submission.csv, "
@@ -419,7 +558,7 @@ class Agent:
 
         plan, code = self.plan_and_code_query(prompt, user_messages)
         new_node = Node(plan=plan, code=code, parent=parent_node)
-        logger.info(f"Debugged node {parent_node.id} to create new node {new_node.id}")
+        logger.info(f"Debugged node {parent_node.id} to create new node {new_node.id} using fallback system")
         return new_node
 
     def update_data_preview(

@@ -1,0 +1,1 @@
+Installed Packages: Your solution can use any relevant machine learning packages such as: numpy, pandas, scikit-learn, statsmodels, xgboost, lightGBM, torch, torchvision, torch-geometric, bayesian-optimization, timm. Feel free to use any other packages too (all packages are already installed!). For neural networks we suggest using PyTorch rather than TensorFlow.

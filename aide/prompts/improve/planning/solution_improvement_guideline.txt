@@ -1,0 +1,15 @@
+- The solution sketch should be a brief natural language description of how the previous solution can be improved.
+- You should be very specific and should only propose a single actionable improvement.
+- This improvement should be atomic so that we can experimentally evaluate the effect of the proposed change.
+- Take the Memory section into consideration when proposing the improvement.
+- The solution sketch should be 3-5 sentences.
+- Don't suggest to do EDA.
+
+Your response should be a detailed step-by-step plan that outlines:
+1. What specific aspect of the previous solution you will improve
+2. Why this improvement will lead to better performance
+3. The technical approach for implementing this improvement
+4. Any new libraries or techniques you will use
+5. How you will validate that the improvement works
+
+Keep the plan focused on a single, atomic improvement.

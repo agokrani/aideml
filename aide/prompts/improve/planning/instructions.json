@@ -1,0 +1,12 @@
+{
+  "sections": [
+    {
+      "name": "Solution improvement sketch guideline",
+      "source": "solution_improvement_guideline.txt"
+    },
+    {
+      "name": "Response format",
+      "source": "../../common/planning_response_format.txt"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+- This first solution design should be relatively simple, without ensembling or hyper-parameter optimization.
+- Take the Memory section into consideration when proposing the design, don't propose the same modelling solution but keep the evaluation the same.
+- The solution sketch should be 3-5 sentences.
+- Propose an evaluation metric that is reasonable for this task.
+- Don't suggest to do EDA.
+- The data is already prepared and available in the "./input" directory. There is no need to unzip any files.
+
+Your response should be a detailed step-by-step plan that outlines:
+1. The approach you will take to solve this problem
+2. The libraries and frameworks you will use
+3. The data processing steps required
+4. The model architecture or algorithm choice
+5. The evaluation strategy
+6. Any specific implementation considerations
+
+Keep the plan concise but detailed enough for a developer to implement.

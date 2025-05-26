@@ -1,0 +1,16 @@
+{
+  "sections": [
+    {
+      "name": "Response format",
+      "source": "../../common/coding_response_format.txt"
+    },
+    {
+      "name": "Implementation guideline", 
+      "source": "../../common/implementation_guideline.txt"
+    },
+    {
+      "name": "Installed Packages",
+      "source": "../../common/environment.txt"
+    }
+  ]
+}
