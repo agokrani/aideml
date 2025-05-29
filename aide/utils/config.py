@@ -73,7 +73,7 @@ class ExecConfig:
     use_modal: bool | None = None
     gpu: str | None = None
     gpu_size: str | None = None
-    gpu_count: str | None = None
+    gpu_count: int | None = None
 
 
 @dataclass
