@@ -1,5 +1,11 @@
-# path to the task data directory
+# path to the task data directory (legacy)
 data_dir: null
+
+# new data configuration
+data:
+  provider: local  # huggingface, kaggle or local
+  dataset: null
+  path: null
 
 # either provide a path to a plaintext file describing the task
 desc_file: null

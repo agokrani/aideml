@@ -12,13 +12,12 @@ from omegaconf import OmegaConf
 from rich.syntax import Syntax
 import shutup
 import logging
-from grpclib import GRPCError
 
 from aide.journal import Journal, filter_journal
 
 from . import tree_export
 from . import copytree, preproc_data, serialize
-import modal
+from .data_provider import DataConfig, create_data_provider
 
 shutup.mute_warnings()
 logger = logging.getLogger("aide")
@@ -78,7 +77,8 @@ class ExecConfig:
 
 @dataclass
 class Config(Hashable):
-    data_dir: Path
+    data_dir: Path | None = None  # legacy support
+    data: DataConfig | None = None
     desc_file: Path | None
 
     goal: str | None
@@ -138,17 +138,23 @@ def prep_cfg(cfg: Config):
     if "--config-path" in cfg.keys():
         cfg.pop("--config-path")
 
-    if cfg.data_dir is None:
-        raise ValueError("`data_dir` must be provided.")
+    if cfg.data is None and cfg.data_dir is None:
+        raise ValueError("A data source must be provided via `data` or `data_dir`.")
 
     if cfg.desc_file is None and cfg.goal is None:
         raise ValueError(
             "You must provide either a description of the task goal (`goal=...`) or a path to a plaintext file containing the description (`desc_file=...`)."
         )
 
-    if cfg.data_dir.startswith("example_tasks/"):
-        cfg.data_dir = Path(__file__).parent.parent.parent / cfg.data_dir
-    cfg.data_dir = Path(cfg.data_dir).resolve()
+    if cfg.data_dir is not None:
+        if str(cfg.data_dir).startswith("example_tasks/"):
+            cfg.data_dir = Path(__file__).parent.parent.parent / cfg.data_dir
+        cfg.data_dir = Path(cfg.data_dir).resolve()
+
+    if cfg.data and cfg.data.provider == "local" and cfg.data.path is not None:
+        if str(cfg.data.path).startswith("example_tasks/"):
+            cfg.data.path = Path(__file__).parent.parent.parent / cfg.data.path
+        cfg.data.path = Path(cfg.data.path).resolve()
 
     if cfg.desc_file is not None:
         cfg.desc_file = Path(cfg.desc_file).resolve()
@@ -208,25 +214,20 @@ def prep_agent_workspace(cfg: Config):
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "submission").mkdir(parents=True, exist_ok=True)
 
-    copytree(cfg.data_dir, cfg.workspace_dir / "input", use_symlinks=not cfg.copy_data)
+    provider = create_data_provider(cfg)
 
     if cfg.exec.use_modal:
         assert cfg.task_id is not None, "Task ID must be provided for Modal runtime"
-        volume = modal.Volume.from_name("agent-volume", create_if_missing=True)
-        task_path = f"tasks/{cfg.task_id}"
-        dirs = []
-
-        try:
-            dirs = volume.listdir("/tasks")
-            dirs = [d.path.split("/")[1] for d in dirs]
-        except GRPCError:
-            with volume.batch_upload() as batch:
-                batch.put_directory(cfg.data_dir, task_path)
-            dirs.append(cfg.task_id)
-
-        if cfg.task_id not in dirs:
-            with volume.batch_upload() as batch:
-                batch.put_directory(cfg.data_dir, task_path)
+        provider.prepare_modal_data(cfg.task_id)
+        provider.prepare_local_data(
+            cfg.workspace_dir / "input",
+            use_symlinks=not cfg.copy_data,
+        )
+    else:
+        provider.prepare_local_data(
+            cfg.workspace_dir / "input",
+            use_symlinks=not cfg.copy_data,
+        )
 
     if cfg.preprocess_data:
         preproc_data(cfg.workspace_dir / "input")
