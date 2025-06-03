@@ -311,10 +311,11 @@ class Interpreter:
         best_submission_dir.mkdir(exist_ok=True, parents=True)
 
         # Copy submission file
-        shutil.copy(
-            self.working_dir / "submission" / "submission.csv",
-            best_submission_dir,
-        )
+        submission_dir = self.working_dir / "submission"
+        if submission_dir.exists():
+            for file_path in submission_dir.iterdir():
+                if file_path.is_file():
+                    shutil.copy(file_path, best_submission_dir)
 
         # Save solution code
         with open(best_solution_dir / "solution.py", "w") as f:
