@@ -85,14 +85,14 @@ class SubmitReview(Action):
     is_bug: bool = Field(
         description="true if the output log shows that the execution failed or has some bug, otherwise false."
     )
-    has_csv_submission: bool = Field(
-        description="true if the code saves the predictions on the test data"
+    has_any_submission: bool = Field(
+        description="true if the code saves the output files as expected, otherwise false."
     )
     summary: str = Field(
         description="write a short summary (2-3 sentences) describing the empirical findings. Alternatively mention if there is a bug or the submission.csv was not properly produced. DO NOT suggest fixes or improvements."
     )
     metric: float | None = Field(
-        description="If the code ran successfully, report the value of the validation metric. Otherwise, leave it null."
+        description="If the code ran successfully, report the value of the primary metric. Otherwise, leave it null."
     )
     lower_is_better: bool = Field(
         description="true if the metric should be minimized (i.e. a lower metric value is better, such as with MSE), false if the metric should be maximized (i.e. a higher metric value is better, such as with accuracy)."
