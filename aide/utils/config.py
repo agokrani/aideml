@@ -69,6 +69,7 @@ class DataConfig:
     provider: str     # "huggingface", "kaggle", "local"
     dataset: str      # dataset name  
     path: Path | None = None  # only for local provider
+    dataset_kwargs: dict | None = None  # additional kwargs for dataset loading
 
 
 @dataclass
@@ -141,28 +142,29 @@ def prep_cfg(cfg: Config):
     if "--config-path" in cfg.keys():
         cfg.pop("--config-path")
 
-    # Handle legacy config format
-    if cfg.data_dir and not cfg.data:
-        cfg.data = DataConfig(
-            provider="local",
-            dataset="legacy",  # placeholder
-            path=cfg.data_dir
-        )
+    # Handle legacy data_dir path resolution
+    if "data_dir" in cfg:
+        if cfg.data_dir: 
+            if str(cfg.data_dir).startswith("example_tasks/"):
+                cfg.data_dir = Path(__file__).parent.parent.parent / cfg.data_dir
+            cfg.data_dir = Path(cfg.data_dir).resolve()
+
+            # Handle legacy config format 
+            if "data" not in cfg or not cfg.data:
+                cfg.data = DataConfig(
+                    provider="local",
+                    dataset="legacy",  # placeholder
+                    path=cfg.data_dir
+                )
 
     # Validation - need either new data config or legacy data_dir
-    if not cfg.data and not cfg.data_dir:
+    if not cfg.data and not "data_dir" in cfg:
         raise ValueError("Must specify either 'data_dir' or 'data' configuration.")
 
     if cfg.desc_file is None and cfg.goal is None:
         raise ValueError(
             "You must provide either a description of the task goal (`goal=...`) or a path to a plaintext file containing the description (`desc_file=...`)."
         )
-
-    # Handle legacy data_dir path resolution
-    if cfg.data_dir:
-        if str(cfg.data_dir).startswith("example_tasks/"):
-            cfg.data_dir = Path(__file__).parent.parent.parent / cfg.data_dir
-        cfg.data_dir = Path(cfg.data_dir).resolve()
 
     # Handle new data config path resolution for local provider
     if cfg.data and cfg.data.provider == "local" and cfg.data.path:
@@ -239,18 +241,20 @@ def prep_agent_workspace(cfg: Config):
         assert cfg.task_id is not None, "Task ID must be provided for Modal runtime"
         
         # Modal execution: prepare data in Modal volume
-        provider.prepare_modal_data(cfg.task_id)
+        provider.prepare_modal_data(cfg.task_id, dataset_kwargs=cfg.data.dataset_kwargs)
         
         # Also prepare local copy for data preview
-        provider.prepare_local_data(
-            cfg.workspace_dir / "input", 
-            use_symlinks=not cfg.copy_data
-        )
+        # provider.prepare_local_data(
+        #     cfg.workspace_dir / "input", 
+        #     use_symlinks=not cfg.copy_data,
+        #     dataset_kwargs=cfg.data.dataset_kwargs
+        # )
     else:
         # Local execution only
         provider.prepare_local_data(
             cfg.workspace_dir / "input",
-            use_symlinks=not cfg.copy_data
+            use_symlinks=not cfg.copy_data,
+            dataset_kwargs=cfg.data.dataset_kwargs
         )
     
     # Preprocess data

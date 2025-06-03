@@ -2,7 +2,6 @@
   "sections": [
     {"name": "Introduction", "source": "introduction.txt"},
     {"name": "Task description", "value": "{task_desc}"},
-    {"name": "Suggested Experiment by Advisor", "value": "{advice}"},
     {"name": "Memory", "value": "{memory}"},
     {"name": "Data Overview", "value": "{data_preview}"},
     {"name": "Instructions", "source": "instructions.json"}

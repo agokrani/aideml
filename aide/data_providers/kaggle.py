@@ -21,7 +21,7 @@ class KaggleProvider(DataProvider):
         """
         self.dataset_name = dataset_name
     
-    def prepare_local_data(self, target_dir: Path, use_symlinks: bool) -> None:
+    def prepare_local_data(self, target_dir: Path, use_symlinks: bool, **kwargs) -> None:
         """Download Kaggle dataset directly to target directory."""
         try:
             import kaggle
@@ -44,23 +44,22 @@ class KaggleProvider(DataProvider):
         kaggle.api.dataset_download_files(self.dataset_name, path=target_dir, unzip=True)
         logger.info(f"Downloaded Kaggle dataset '{self.dataset_name}' to {target_dir}")
     
-    def prepare_modal_data(self, task_id: str) -> str:
+    def prepare_modal_data(self, task_id: str, **kwargs) -> str:
         """Download directly to Modal volume."""
-        from ..runtime.modal_data_functions import download_kaggle_data
+        from ..runtime.modal_data_functions import download_kaggle_data, app, volume
+        try:
+            task_contents = volume.listdir(f"/tasks/{task_id}")
+            if task_contents:  # Directory exists and has contents
+                logger.info(f"Dataset already exists for task {task_id}, skipping download")
+                return f"Dataset {self.dataset_name} already exists at tasks/{task_id}"
+        except Exception:
+            # Directory doesn't exist, proceed with download
+            logger.info(f"Downloading Kaggle dataset '{self.dataset_name}' to Modal volume for task {task_id}")
+            with app.run():
+                result = download_kaggle_data.remote(self.dataset_name, task_id)
+            logger.info(f"Modal download result: {result}")
         
-        logger.info(f"Downloading Kaggle dataset '{self.dataset_name}' to Modal volume for task {task_id}")
-        
-        result = download_kaggle_data.remote(self.dataset_name, task_id)
-        logger.info(f"Modal download result: {result}")
-        
-        return result
-    
-    def get_modal_requirements(self) -> Dict[str, Any]:
-        """Return Modal requirements for Kaggle provider."""
-        return {
-            "pip": ["kaggle"],
-            "secrets": ["kaggle-creds"]
-        }
+            return result
     
     @property
     def name(self) -> str:

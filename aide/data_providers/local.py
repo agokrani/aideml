@@ -24,12 +24,12 @@ class LocalDataProvider(DataProvider):
         if not self.data_dir.exists():
             raise ValueError(f"Data directory does not exist: {self.data_dir}")
     
-    def prepare_local_data(self, target_dir: Path, use_symlinks: bool) -> None:
+    def prepare_local_data(self, target_dir: Path, use_symlinks: bool, **kwargs) -> None:
         """Copy/symlink local data using existing copytree."""
         logger.info(f"Preparing local data from {self.data_dir} to {target_dir}")
         copytree(self.data_dir, target_dir, use_symlinks=use_symlinks)
-    
-    def prepare_modal_data(self, task_id: str) -> str:
+
+    def prepare_modal_data(self, task_id: str, **kwargs) -> str:
         """Upload local data to Modal volume (existing behavior)."""
         import modal
         from grpclib import GRPCError
@@ -58,13 +58,6 @@ class LocalDataProvider(DataProvider):
             logger.info(f"Created and uploaded local data to Modal volume at {task_path}")
         
         return f"Uploaded local data to tasks/{task_id}"
-    
-    def get_modal_requirements(self) -> Dict[str, Any]:
-        """Local provider needs no additional Modal requirements."""
-        return {
-            "pip": [],
-            "secrets": []
-        }
     
     @property
     def name(self) -> str:
