@@ -14,7 +14,10 @@ from .utils.config import (
 )
 import traceback
 import asyncio
+import logging
 from aide.callbacks.manager import CallbackManager
+
+logger = logging.getLogger("aide")
 
 @dataclass
 class Solution:
@@ -55,9 +58,9 @@ class Experiment:
         )
 
     def run(self, steps: int) -> Solution:
-        print("Starting experiment run")
+        logger.info("Starting experiment run")
         for _i in range(steps):
-            print(f"Step {_i+1}/{steps}: About to call agent.step()")
+            logger.info(f"Step {_i+1}/{steps}: About to call agent.step()")
             try:
                 try:
                     loop = asyncio.get_running_loop()
@@ -71,23 +74,23 @@ class Experiment:
 
                 
                 loop.run_until_complete(self.agent.step(exec_callback=self.interpreter.run, callback_manager=callback_manager))
-                print(f"Step {_i+1} completed")
+                logger.info(f"Step {_i+1} completed")
             except Exception as e:
-                print(f"Error in agent.step: {e}")
-                print(traceback.format_exc())
+                logger.error(f"Error in agent.step: {e}")
+                logger.error(traceback.format_exc())
             save_run(self.cfg, self.journal)
 
-            print(f"Journal has {len(self.journal.nodes)} nodes")
+            logger.info(f"Journal has {len(self.journal.nodes)} nodes")
         
-        print("Cleanup session")
+        logger.info("Cleanup session")
         self.interpreter.cleanup_session()
         
-        print("Getting best node")
+        logger.info("Getting best node")
         best_node = self.journal.get_best_node()
-        print(f"Best node: {best_node}")
+        logger.info(f"Best node: {best_node}")
 
         if best_node is None:
-            print("No successful nodes were found")
+            logger.warning("No successful nodes were found")
             return Solution(code="# No successful solution found", valid_metric=float('-inf'))
     
         return Solution(code=best_node.code, valid_metric=best_node.metric.value)

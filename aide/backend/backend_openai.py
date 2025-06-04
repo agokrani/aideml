@@ -23,15 +23,14 @@ from aide.function import get_function
 import httpx
 import os
 
-# Add at top of backend_openai.py
-print("OpenAI configuration:", dir(openai))
-print("OpenAI version:", openai.__version__)
-
-print("HTTP_PROXY:", os.environ.get("HTTP_PROXY"))
-print("HTTPS_PROXY:", os.environ.get("HTTPS_PROXY"))
-
-
 logger = logging.getLogger("aide")
+
+# Add at top of backend_openai.py
+logger.debug("OpenAI configuration:", dir(openai))
+logger.debug("OpenAI version:", openai.__version__)
+
+logger.debug("HTTP_PROXY:", os.environ.get("HTTP_PROXY"))
+logger.debug("HTTPS_PROXY:", os.environ.get("HTTPS_PROXY"))
 
 _client: openai.OpenAI = None  # type: ignore
 
@@ -50,7 +49,6 @@ def _setup_openai_client():
     try:
         custom_http_client = httpx.Client(trust_env=False) 
         _client = openai.OpenAI(http_client=custom_http_client, max_retries=0)
-        print("OpenAI client initialized with custom httpx.Client (proxies explicitly set to None).")
         logger.info("OpenAI client initialized with custom httpx.Client (proxies explicitly set to None).")
     except TypeError as e:
         logger.error(f"Error initializing OpenAI client with custom httpx_client: {e}")

@@ -186,7 +186,7 @@ class Agent:
         self, prompt, user_messages=None, retries=3
     ) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
-        print(f"Making API call with model: {self.acfg.code.model}")
+        logger.info(f"Making API call with model: {self.acfg.code.model}")
         completion_text = None
         
         for _ in range(retries):
@@ -211,7 +211,7 @@ class Agent:
             logger.info(f"Raw response tuple from plan/code LLM call: {raw_query_response_tuple}")
             completion_text = raw_query_response_tuple
 
-            print(f"API response received: {completion_text[:100]}...")
+            logger.info(f"API response received: {completion_text[:100]}...")
 
             code = extract_code(completion_text)
             nl_text = extract_text_up_to_code(completion_text)
@@ -246,7 +246,7 @@ class Agent:
             "Introduction": introduction,
             "Task description": self.task_desc,
         }
-        print(f"Making research API call with model: {self.acfg.advisor.model}")
+        logger.info(f"Making research API call with model: {self.acfg.advisor.model}")
         result = query(
             system_message=prompt,
             user_messages=None,
@@ -255,7 +255,7 @@ class Agent:
             temperature=self.acfg.advisor.temp,
             convert_system_to_user=self.acfg.convert_system_to_user,
         )
-        print(f"Research response received: {result[:100]}...")
+        logger.info(f"Research response received: {result[:100]}...")
         return result
 
     def get_initial_research(self, redo=False):
@@ -319,14 +319,14 @@ class Agent:
 
     def _draft(self, user_messages: List | None = None) -> Node:
         try:
-            print("Starting _draft method")
+            logger.info("Starting _draft method")
             
             try:
                 advice = self._advisor()
-                print(f"Received advice: {advice[:100]}...")
+                logger.info(f"Received advice: {advice[:100]}...")
             except Exception as e:
-                print(f"Error in _advisor: {e}")
-                print(traceback.format_exc())
+                logger.error(f"Error in _advisor: {e}")
+                logger.error(traceback.format_exc())
                 advice = "Error getting advice"
 
             introduction = (
@@ -366,23 +366,23 @@ class Agent:
                 prompt["Data Overview"] = self.data_preview
             
             try:
-                print(f"About to call plan_and_code_query with model: {self.acfg.code.model}")
+                logger.info(f"About to call plan_and_code_query with model: {self.acfg.code.model}")
                 plan, code = self.plan_and_code_query(prompt, user_messages)
-                print(f"Received plan: {plan[:50]}...")
-                print(f"Received code: {code[:50]}...")
+                logger.info(f"Received plan: {plan[:50]}...")
+                logger.info(f"Received code: {code[:50]}...")
             except Exception as e:
-                print(f"Error in plan_and_code_query: {e}")
-                print(traceback.format_exc())
+                logger.error(f"Error in plan_and_code_query: {e}")
+                logger.error(traceback.format_exc())
                 plan, code = "Error getting plan", "print('Error getting code')"
 
             new_node = Node(plan=plan, code=code)
-            print(f"Created new node with ID: {new_node.id}")
+            logger.info(f"Created new node with ID: {new_node.id}")
 
             logger.info(f"Drafted new node {new_node.id}")
             return new_node
         except Exception as e:
-            print(f"Unexpected error in _draft: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Unexpected error in _draft: {e}")
+            logger.error(traceback.format_exc())
             return Node(plan="Error in draft", code="print('Error in draft')")
 
 
@@ -477,7 +477,7 @@ class Agent:
     async def step(self, exec_callback: ExecCallbackType = None, callback_manager=None):
         # clear the submission dir from previous steps
 
-        print(f"Starting agent step, current journal size: {len(self.journal.nodes)}")
+        logger.info(f"Starting agent step, current journal size: {len(self.journal.nodes)}")
 
         if not self.cfg.exec.use_modal:
             shutil.rmtree(self.cfg.workspace_dir / "submission", ignore_errors=True)
@@ -489,11 +489,11 @@ class Agent:
             self.update_data_preview()
 
         parent_node = self.search_policy()
-        print(f"Search policy selected parent node: {parent_node}")
+        logger.info(f"Search policy selected parent node: {parent_node}")
         logger.info(f"Agent is generating code, parent node type: {type(parent_node)}")
 
         if parent_node is None:
-            print("Drafting new node")
+            logger.info("Drafting new node")
             await callback_manager.execute_callback(
                 "stage_start", "Draft", supress_errors=True
             )
@@ -502,7 +502,7 @@ class Agent:
                 "stage_end", "Draft", supress_errors=True
             )
         elif parent_node.is_buggy:
-            print(f"Debugging buggy node: {parent_node.id}")
+            logger.info(f"Debugging buggy node: {parent_node.id}")
             await callback_manager.execute_callback(
                 "stage_start", "Debug", supress_errors=True
             )
@@ -511,7 +511,7 @@ class Agent:
                 "stage_end", "Debug", supress_errors=True
             )
         else:
-            print(f"Improving node: {parent_node.id}")
+            logger.info(f"Improving node: {parent_node.id}")
             await callback_manager.execute_callback(
                 "stage_start", "Improve", supress_errors=True
             )
@@ -520,9 +520,9 @@ class Agent:
                 "stage_end", "Improve", supress_errors=True
             )
         if exec_callback:
-            print("Executing node code")
+            logger.info("Executing node code")
             exec_result = exec_callback(result_node.code)
-            print(f"Execution complete, error: {exec_result.exc_type}")
+            logger.info(f"Execution complete, error: {exec_result.exc_type}")
         else:
             exec_result = await callback_manager.execute_callback(
                 "exec", result_node.code
@@ -556,7 +556,7 @@ class Agent:
                     f"Actually, node {result_node.id} did not produce a submission.csv"
                 )
         self.journal.append(result_node)
-        print(f"Step complete, journal now has {len(self.journal.nodes)} nodes")
+        logger.info(f"Step complete, journal now has {len(self.journal.nodes)} nodes")
 
         # if the result_node is the best node, cache its submission.csv and solution.py
         # to best_solution/ by copying it there
