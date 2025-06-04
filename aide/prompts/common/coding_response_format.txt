@@ -1,0 +1,1 @@
+Your response should contain only a single markdown code block (wrapped in ```) which implements the provided plan. The code should be a complete, self-contained Python program that can be executed as-is. Do not include any explanatory text outside the code block.

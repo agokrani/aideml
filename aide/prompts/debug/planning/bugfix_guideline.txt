@@ -1,0 +1,11 @@
+- You should write a brief natural language description (3-5 sentences) of how the issue in the previous implementation can be fixed.
+- Don't suggest to do EDA.
+
+Your response should be a detailed step-by-step plan that outlines:
+1. What specific bug or issue you identified from the execution output
+2. The root cause of the problem
+3. The approach you will take to fix the issue
+4. Any changes needed to the code structure or logic
+5. How you will ensure the fix works and produces the required submission.csv
+
+Keep the plan focused on debugging and fixing the specific issues identified.

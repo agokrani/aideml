@@ -1,0 +1,12 @@
+{
+  "sections": [
+    {
+      "name": "Solution sketch guideline",
+      "source": "solution_sketch_guideline.txt"
+    },
+    {
+      "name": "Response format",
+      "source": "../../common/planning_response_format.txt"
+    }
+  ]
+}

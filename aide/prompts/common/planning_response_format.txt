@@ -1,0 +1,1 @@
+Your response should be a detailed, structured plan that a developer can follow to implement the solution. The plan should be clear, specific, and actionable. Do not include any code - focus only on the strategy, approach, and implementation steps.

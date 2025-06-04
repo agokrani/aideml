@@ -1,0 +1,10 @@
+{
+  "sections": [
+    {"name": "Introduction", "source": "introduction.txt"},
+    {"name": "Task description", "value": "{task_desc}"},
+    {"name": "Previous (buggy) implementation", "value": "{buggy_code}"},
+    {"name": "Execution output", "value": "{execution_output}"},
+    {"name": "Data Overview", "value": "{data_preview}"},
+    {"name": "Instructions", "source": "instructions.json"}
+  ]
+}

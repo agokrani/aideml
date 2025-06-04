@@ -13,7 +13,7 @@ from .utils import data_preview
 from .utils.config import Config
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import extract_code, extract_text_up_to_code, wrap_code
-import traceback
+from .utils.util import load_prompt
 
 logger = logging.getLogger("aide")
 
@@ -115,73 +115,6 @@ class Agent:
         logger.info(f"[search policy] greedy node selected: node {greedy_node.id}")
         return greedy_node
 
-    @property
-    def _prompt_environment(self):
-        pkgs = [
-            "numpy",
-            "pandas",
-            "scikit-learn",
-            "statsmodels",
-            "xgboost",
-            "lightGBM",
-            "torch",
-            "torchvision",
-            "torch-geometric",
-            "bayesian-optimization",
-            "timm",
-        ]
-        random.shuffle(pkgs)
-        pkg_str = ", ".join([f"`{p}`" for p in pkgs])
-
-        env_prompt = {
-            "Installed Packages": f"Your solution can use any relevant machine learning packages such as: {pkg_str}. Feel free to use any other packages too (all packages are already installed!). For neural networks we suggest using PyTorch rather than TensorFlow."
-        }
-        return env_prompt
-
-    @property
-    def _prompt_impl_guideline(self):
-        tot_time_elapsed = time.time() - self.start_time
-        tot_time_remaining = self.acfg.time_limit - tot_time_elapsed
-        exec_timeout = int(min(self.cfg.exec.timeout, tot_time_remaining))
-
-        impl_guideline = [
-            f"<TOTAL_TIME_REMAINING: {format_time(tot_time_remaining)}>",
-            f"<TOTAL_STEPS_REMAINING: {self.acfg.steps - self.current_step}>",
-            "The code should **implement the proposed solution**, **print the value of the evaluation metric computed on a hold-out validation set**,",
-            "**AND MOST IMPORTANTLY SAVE PREDICTIONS ON THE PROVIDED UNLABELED TEST DATA IN A `submission.csv` FILE IN THE ./submission/ DIRECTORY.**",
-            "The code should be a single-file python program that is self-contained and can be executed as-is.",
-            "No parts of the code should be skipped, don't terminate the before finishing the script.",
-            "Your response should only contain a single code block.",
-            f"Be aware of the running time of the code, it should complete within {humanize.naturaldelta(exec_timeout)}.",
-            'All the provided input data is stored in "./input" directory.',
-            '**You MUST submit predictions on the provided unlabeled test data in a `submission.csv` file** file in the "./working" directory as described in the task description** This is extremely important since this file is used for grading/evaluation. DO NOT FORGET THE submission.csv file!',
-            'You can also use the "./working" directory to store any temporary files that your code needs to create.',
-            "REMEMBER THE ./submission/submission.csv FILE!!!!! The correct directory is important too.",
-        ]
-        if self.acfg.expose_prediction:
-            impl_guideline.append(
-                "The implementation should include a predict() function, "
-                "allowing users to seamlessly reuse the code to make predictions on new data. "
-                "The prediction function should be well-documented, especially the function signature."
-            )
-
-        if self.acfg.k_fold_validation > 1:
-            impl_guideline.append(
-                f"The evaluation should be based on {self.acfg.k_fold_validation}-fold cross-validation but only if that's an appropriate evaluation for the task at hand."
-            )
-
-        return {"Implementation guideline": impl_guideline}
-
-    @property
-    def _prompt_resp_fmt(self):
-        return {
-            "Response format": (
-                "Your response should be a brief outline/sketch of your proposed solution in natural language (3-5 sentences), "
-                "followed by a single markdown code block (wrapped in ```) which implements this solution and prints out the evaluation metric. "
-                "There should be no additional headings or text in your response. Just natural language text followed by a newline and then the markdown code block. "
-            )
-        }
-
     def plan_and_code_query(
         self, prompt, user_messages=None, retries=3
     ) -> tuple[str, str]:
@@ -224,248 +157,146 @@ class Agent:
         logger.info("Final plan + code extraction attempt failed, giving up...")
         return "", completion_text  # type: ignore
 
-    def _perform_initial_research(self):
-        introduction = (
-            "You are an Machine learning expert tasked with advising on the best ML task/model/algorithm to use.\n"
-            "Your capabilities include: \n\n"
-            "- Read and understand the dataset information and user's task description, this description may include the task, "
-            "the model (or method), and the evaluation metrics, etc. You should always follow the user's task description."
-            "- You should always use the function `search_arxiv` or `search_papers_with_code` to search the "
-            "state-of-the-art machine learning tasks/models/algorithms that can be used to solve the user's requirements, "
-            "and stay up-to-date with the latest."
-            "- If the user does not provide the details (task/model/algorithm/dataset/metric), you should always suggest."
-            "- You should provide the paper reference links of the task/model/algorithm/metric you suggest. You use the "
-            "search results from the function `search_arxiv` or `search_papers_with_code` by generated search keywords."
-            "- The suggestion should be as detailed as possible, include the SOTA methods for data processing, feature "
-            "extraction, model selection, training/sering methods and evaluation metrics. And the reasons why you suggest."
-            "- You should help user to decide which framework/tools to use for the project, such as PyTorch, TensorFlow, "
-            " MLFlow, W&B, etc."
-        )
+    def plan_query(self, stage: str, user_messages=None, retries=3, **variables) -> str:
+        """Generate a natural language plan using external prompt configuration."""
+        for attempt in range(retries):
+            try:
+                # Load prompt from external files
+                prompt = load_prompt(stage, "planning", obfuscate=self.acfg.obfuscate, **variables)
+                
+                # If prompt loading failed (no files), return empty plan
+                if not prompt:
+                    logger.warning(f"No prompt configuration found for {stage}/planning, returning empty plan")
+                    return ""
+                
+                plan_text = query(
+                    system_message=prompt,
+                    user_messages=user_messages,
+                    model=self.acfg.code.model,
+                    temperature=self.acfg.code.temp,
+                    convert_system_to_user=self.acfg.convert_system_to_user,
+                )
+                
+                # Validate that we got a reasonable plan
+                if plan_text and len(plan_text.strip()) > 10:
+                    return plan_text.strip()
+                
+                logger.info(f"Plan generation failed on attempt {attempt + 1}, retrying...")
+                
+            except Exception as e:
+                logger.warning(f"Plan query failed on attempt {attempt + 1}: {e}")
+                
+        logger.info("Final plan generation attempt failed, returning empty plan")
+        return ""
 
-        prompt: Any = {
-            "Introduction": introduction,
-            "Task description": self.task_desc,
-        }
-        print(f"Making research API call with model: {self.acfg.advisor.model}")
-        result = query(
-            system_message=prompt,
-            user_messages=None,
-            functions=[SearchArxiv, SearchPapersWithCode],
-            model=self.acfg.advisor.model,
-            temperature=self.acfg.advisor.temp,
-            convert_system_to_user=self.acfg.convert_system_to_user,
-        )
-        print(f"Research response received: {result[:100]}...")
-        return result
-
-    def get_initial_research(self, redo=False):
-
-        if self._initial_research is None or self._initial_research == "" or redo:
-            self._initial_research = self._perform_initial_research()
-
-        return self._initial_research
-
-    def _advisor(self, retries=3):
-        introduction = (
-            "You are an expert machine learning engineer attempting a task. "
-            "In order to complete this task, you need to come up with an excellent and creative plan "
-            "for a solution. The intial research has been done for you and you are supposed to provide the "
-            "next experiment you would like to run. We will now provide a description of the task and the initial research."
-        )
-
-        if self._initial_research is None or self._initial_research == "":
-            self._initial_research = self._perform_initial_research()
-
-        prompt: Any = {
-            "Introduction": introduction,
-            "Task description": self.task_desc,
-            "Initial Research": self._initial_research,
-            "Memory": self.journal.generate_summary(),
-            "Instructions": {},
-        }
-        prompt["Instructions"] |= {
-            "Solution sketch guideline": [
-                "This first solution design should be from the results of the initial research. ",
-                "Initial expriments should be relatively simple, and keep growing complexity in the following steps.",
-                "Take the Memory section into consideration when proposing the design,"
-                " don't propose the same modelling solution but keep the evaluation the same.",
-                "The solution sketch should be 3-5 sentences giving clear idea to the researcher on how to proceed. ",
-                "Solution sketch should be concise and clear that any one from the team can understand and implement.",
-                "Propose an evaluation metric that is reasonable for this task.",
-                "Don't suggest to do EDA.",
-                "The data is already prepared and available in the `./input` directory. There is no need to unzip any files.",
-                "You should also provide the list of relevant packages you will use for these experiments.",
-            ],
-            "Response format": (
-                "Your response should be a brief outline/sketch of your proposed solution in natural language (3-5 sentences), "
-                "clear and concise sketch that any one from the team can understand and implement. "
-                "Don't give generic advice, be spefic about the exact experiment you would like to run. "
-                "It Should contain a list of relevant packages you will use for these experiments. "
-            ),
-        }
-        if self.acfg.data_preview:
-            prompt["Data Overview"] = self.data_preview
-
-        advice = query(
-            system_message=prompt,
-            user_messages=None,
-            functions=None,
-            model=self.acfg.advisor.model,
-            temperature=self.acfg.advisor.temp,
-            convert_system_to_user=self.acfg.convert_system_to_user,
-        )
-
-        return advice
+    def code_query(self, stage: str, plan: str, user_messages=None, retries=3, **variables) -> str:
+        """Generate code implementing the provided plan using external prompt configuration."""
+        for attempt in range(retries):
+            try:
+                # Add plan to variables
+                variables["plan"] = plan
+                
+                # Load prompt from external files
+                prompt = load_prompt(stage, "coding", obfuscate=self.acfg.obfuscate, **variables)
+                
+                # If prompt loading failed (no files), fall back to old behavior
+                if not prompt:
+                    logger.warning(f"No prompt configuration found for {stage}/coding, using fallback")
+                    return ""
+                
+                completion_text = query(
+                    system_message=prompt,
+                    user_messages=user_messages,
+                    model=self.acfg.code.model,
+                    temperature=self.acfg.code.temp,
+                    convert_system_to_user=self.acfg.convert_system_to_user,
+                )
+                
+                # Extract code from response
+                code = extract_code(completion_text)
+                
+                if code:
+                    return code
+                
+                logger.info(f"Code extraction failed on attempt {attempt + 1}, retrying...")
+                
+            except Exception as e:
+                logger.warning(f"Code query failed on attempt {attempt + 1}: {e}")
+                
+        logger.info("Final code generation attempt failed, returning completion text")
+        return completion_text if 'completion_text' in locals() else ""
 
     def _draft(self, user_messages: List | None = None) -> Node:
-        try:
-            print("Starting _draft method")
-            
-            try:
-                advice = self._advisor()
-                print(f"Received advice: {advice[:100]}...")
-            except Exception as e:
-                print(f"Error in _advisor: {e}")
-                print(traceback.format_exc())
-                advice = "Error getting advice"
-
-            introduction = (
-                "You are a Kaggle grandmaster attending a competition. "
-                "In order to win this competition, you need to come up with an excellent and creative plan "
-                "for a solution and then implement this solution in Python. We will now provide a description of the task."
-            )
-            if self.acfg.obfuscate:
-                introduction = (
-                    "You are an expert machine learning engineer attempting a task. "
-                    "In order to complete this task, you need to come up with an excellent and creative plan "
-                    "for a solution and then implement this solution in Python. We will now provide a description of the task."
-                )
-            prompt: Any = {
-                "Introduction": introduction,
-                "Task description": self.task_desc,
-                "Suggested Experiment by Advisor": advice,
-                "Memory": self.journal.generate_summary(),
-                "Instructions": {},
-            }
-            prompt["Instructions"] |= self._prompt_resp_fmt
-            prompt["Instructions"] |= {
-                "Solution sketch guideline": [
-                    "This first solution design should be relatively simple, without ensembling or hyper-parameter optimization.",
-                    "Take the Memory section into consideration when proposing the design,"
-                    " don't propose the same modelling solution but keep the evaluation the same.",
-                    "The solution sketch should be 3-5 sentences.",
-                    "Propose an evaluation metric that is reasonable for this task.",
-                    "Don't suggest to do EDA.",
-                    "The data is already prepared and available in the `./input` directory. There is no need to unzip any files.",
-                ],
-            }
-            prompt["Instructions"] |= self._prompt_impl_guideline
-            prompt["Instructions"] |= self._prompt_environment
-
-            if self.acfg.data_preview:
-                prompt["Data Overview"] = self.data_preview
-            
-            try:
-                print(f"About to call plan_and_code_query with model: {self.acfg.code.model}")
-                plan, code = self.plan_and_code_query(prompt, user_messages)
-                print(f"Received plan: {plan[:50]}...")
-                print(f"Received code: {code[:50]}...")
-            except Exception as e:
-                print(f"Error in plan_and_code_query: {e}")
-                print(traceback.format_exc())
-                plan, code = "Error getting plan", "print('Error getting code')"
-
-            new_node = Node(plan=plan, code=code)
-            print(f"Created new node with ID: {new_node.id}")
-
-            logger.info(f"Drafted new node {new_node.id}")
-            return new_node
-        except Exception as e:
-            print(f"Unexpected error in _draft: {e}")
-            print(traceback.format_exc())
-            return Node(plan="Error in draft", code="print('Error in draft')")
-
+        # Prepare variables for external prompts
+        variables = {
+            "task_desc": self.task_desc,
+            "memory": self.journal.generate_summary(),
+            "data_preview": self.data_preview if self.acfg.data_preview else "",
+            "time_remaining": format_time(self.acfg.time_limit - (time.time() - self.start_time)),
+            "steps_remaining": str(self.acfg.steps - self.current_step),
+            "exec_timeout": humanize.naturaldelta(int(min(self.cfg.exec.timeout, self.acfg.time_limit - (time.time() - self.start_time)))),
+        }
+        
+        # Try new two-phase approach first
+        plan = self.plan_query("draft", user_messages, **variables)
+        assert plan is not None, "Draft plan should not be None"
+        
+        code = self.code_query("draft", plan, user_messages, **variables)
+        assert code is not None, "Draft code should not be None"
+        
+        new_node = Node(plan=plan, code=code)
+        logger.info(f"Drafted new node {new_node.id} using new prompt system")
+        
+        return new_node
+        
 
     def _improve(self, parent_node: Node, user_messages: List | None = None) -> Node:
-        introduction = (
-            "You are a Kaggle grandmaster attending a competition. You are provided with a previously developed "
-            "solution below and should improve it in order to further increase the (test time) performance. "
-            "For this you should first outline a brief plan in natural language for how the solution can be improved and "
-            "then implement this improvement in Python based on the provided previous solution. "
-        )
-        if self.acfg.obfuscate:
-            introduction = (
-                "You are an expert machine learning engineer attempting a task. You are provided with a previously developed "
-                "solution below and should improve it in order to further increase the (test time) performance. "
-                "For this you should first outline a brief plan in natural language for how the solution can be improved and "
-                "then implement this improvement in Python based on the provided previous solution. "
-            )
-        prompt: Any = {
-            "Introduction": introduction,
-            "Task description": self.task_desc,
-            "Memory": self.journal.generate_summary(),
-            "Instructions": {},
+        # Prepare variables for external prompts
+        variables = {
+            "task_desc": self.task_desc,
+            "memory": self.journal.generate_summary(),
+            "previous_solution": wrap_code(parent_node.code),
+            "time_remaining": format_time(self.acfg.time_limit - (time.time() - self.start_time)),
+            "steps_remaining": str(self.acfg.steps - self.current_step),
+            "exec_timeout": humanize.naturaldelta(int(min(self.cfg.exec.timeout, self.acfg.time_limit - (time.time() - self.start_time)))),
         }
-        prompt["Previous solution"] = {
-            "Code": wrap_code(parent_node.code),
-        }
-
-        prompt["Instructions"] |= self._prompt_resp_fmt
-        prompt["Instructions"] |= {
-            "Solution improvement sketch guideline": [
-                "The solution sketch should be a brief natural language description of how the previous solution can be improved.",
-                "You should be very specific and should only propose a single actionable improvement.",
-                "This improvement should be atomic so that we can experimentally evaluate the effect of the proposed change.",
-                "Take the Memory section into consideration when proposing the improvement.",
-                "The solution sketch should be 3-5 sentences.",
-                "Don't suggest to do EDA.",
-            ],
-        }
-        prompt["Instructions"] |= self._prompt_impl_guideline
-
-        plan, code = self.plan_and_code_query(prompt, user_messages)
+        
+        
+        # Try new two-phase approach first
+        plan = self.plan_query("improve", user_messages, **variables)
+        assert plan is not None, "Improve plan should not be None"
+        
+        code = self.code_query("improve", plan, user_messages, **variables)
+        assert code is not None, "Improve code should not be None"
+        
         new_node = Node(plan=plan, code=code, parent=parent_node)
-        logger.info(f"Improved node {parent_node.id} to create new node {new_node.id}")
+        logger.info(f"Improved node {parent_node.id} to create new node {new_node.id} using new prompt system")
+        
         return new_node
+        
 
     def _debug(self, parent_node: Node, user_messages: List | None = None) -> Node:
-        introduction = (
-            "You are a Kaggle grandmaster attending a competition. "
-            "Your previous solution had a bug and/or did not produce a submission.csv, "
-            "so based on the information below, you should revise it in order to fix this. "
-            "Your response should be an implementation outline in natural language,"
-            " followed by a single markdown code block which implements the bugfix/solution."
-        )
-        if self.acfg.obfuscate:
-            introduction = (
-                "You are an expert machine learning engineer attempting a task. "
-                "Your previous solution had a bug and/or did not produce a submission.csv, "
-                "so based on the information below, you should revise it in order to fix this. "
-                "Your response should be an implementation outline in natural language,"
-                " followed by a single markdown code block which implements the bugfix/solution."
-            )
-        prompt: Any = {
-            "Introduction": introduction,
-            "Task description": self.task_desc,
-            "Previous (buggy) implementation": wrap_code(parent_node.code),
-            "Execution output": wrap_code(parent_node.term_out, lang=""),
-            "Instructions": {},
+        # Prepare variables for external prompts
+        variables = {
+            "task_desc": self.task_desc,
+            "buggy_code": wrap_code(parent_node.code),
+            "execution_output": wrap_code(parent_node.term_out, lang=""),
+            "data_preview": self.data_preview if self.acfg.data_preview else "",
+            "time_remaining": format_time(self.acfg.time_limit - (time.time() - self.start_time)),
+            "steps_remaining": str(self.acfg.steps - self.current_step),
+            "exec_timeout": humanize.naturaldelta(int(min(self.cfg.exec.timeout, self.acfg.time_limit - (time.time() - self.start_time)))),
         }
-        prompt["Instructions"] |= self._prompt_resp_fmt
-        prompt["Instructions"] |= {
-            "Bugfix improvement sketch guideline": [
-                "You should write a brief natural language description (3-5 sentences) of how the issue in the previous implementation can be fixed.",
-                "Don't suggest to do EDA.",
-            ],
-        }
-        prompt["Instructions"] |= self._prompt_impl_guideline
+        
+        # Try new two-phase approach first
+        plan = self.plan_query("debug", user_messages, **variables)
+        assert plan is not None, "Debug plan should not be None"
+        
+        code = self.code_query("debug", plan, user_messages, **variables)
+        assert code is not None, "Debug code should not be None"
 
-        if self.acfg.data_preview:
-            prompt["Data Overview"] = self.data_preview
-
-        plan, code = self.plan_and_code_query(prompt, user_messages)
         new_node = Node(plan=plan, code=code, parent=parent_node)
-        logger.info(f"Debugged node {parent_node.id} to create new node {new_node.id}")
+        logger.info(f"Debugged node {parent_node.id} to create new node {new_node.id} using new prompt system")
+        
         return new_node
 
     def update_data_preview(

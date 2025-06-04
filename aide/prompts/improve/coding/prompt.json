@@ -1,0 +1,9 @@
+{
+  "sections": [
+    {"name": "Introduction", "source": "introduction.txt"},
+    {"name": "Task description", "value": "{task_desc}"},
+    {"name": "Plan", "value": "{plan}"},
+    {"name": "Previous solution", "value": "{previous_solution}"},
+    {"name": "Instructions", "source": "instructions.json"}
+  ]
+}

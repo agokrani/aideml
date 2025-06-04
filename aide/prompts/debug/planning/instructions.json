@@ -1,0 +1,12 @@
+{
+  "sections": [
+    {
+      "name": "Bugfix improvement sketch guideline",
+      "source": "bugfix_guideline.txt"
+    },
+    {
+      "name": "Response format",
+      "source": "../../common/planning_response_format.txt"
+    }
+  ]
+}

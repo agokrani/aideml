@@ -3,7 +3,7 @@ from aide.runtime.modal import ModalRuntime
 import modal as modal
 
 
-def get_runtime(workspace_dir, cfg, task_id=None, preprocess_data=False):
+def get_runtime(workspace_dir, cfg, task_id=None, preprocess_data=False, use_symlinks=False):
     if cfg.use_modal:
         gpu = None
         if cfg.gpu is not None:
@@ -32,6 +32,7 @@ def get_runtime(workspace_dir, cfg, task_id=None, preprocess_data=False):
             task_id=task_id,
             preprocess_data=preprocess_data,
             agent_file_name=cfg.agent_file_name,
+            use_symlinks=use_symlinks,
         )
     else:
         return LocalRuntime(workspace_dir, cfg.timeout, cfg.format_tb_ipython)
