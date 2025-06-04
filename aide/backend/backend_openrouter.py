@@ -1,6 +1,7 @@
 """Backend for OpenRouter API"""
 
 import logging
+import httpx
 import os
 import time
 from typing import List
@@ -24,7 +25,6 @@ OPENAI_TIMEOUT_EXCEPTIONS = (
     openai.InternalServerError,
 )
 
-import httpx
 
 @once
 def _setup_openrouter_client():
