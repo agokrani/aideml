@@ -13,7 +13,7 @@ def get_runtime(workspace_dir, cfg, task_id=None, preprocess_data=False):
                 raise ValueError(
                     f"GPU {cfg.gpu} not found. Please refer to modal docs: https://modal.com/docs/reference/modal.gpu for available GPUs"
                 )
-            gpu_count = cfg.gpu_count if cfg.gpu_count is not None else 1
+            gpu_count = int(cfg.gpu_count) if cfg.gpu_count is not None else int(1)
             if cfg.gpu_size is not None and cfg.gpu.upper() != "A100":
                 raise ValueError("GPU size can only be specified for A100 GPUs")
             if cfg.gpu.upper() == "A100":

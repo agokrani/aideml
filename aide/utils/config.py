@@ -204,32 +204,54 @@ def load_task_desc(cfg: Config):
 
 def prep_agent_workspace(cfg: Config):
     """Setup the agent's workspace and preprocess data if necessary."""
+    logger.info("Starting agent workspace preparation...")
+    logger.info(f"Data directory: {cfg.data_dir}")
+    logger.info(f"Workspace directory: {cfg.workspace_dir}")
+
     (cfg.workspace_dir / "input").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "submission").mkdir(parents=True, exist_ok=True)
 
     copytree(cfg.data_dir, cfg.workspace_dir / "input", use_symlinks=not cfg.copy_data)
+    logger.info("Local workspace directories created and data copied")
 
     if cfg.exec.use_modal:
+        logger.info("Modal runtime detected - preparing Modal volume...")
         assert cfg.task_id is not None, "Task ID must be provided for Modal runtime"
+        logger.info(f"Using task ID: {cfg.task_id}")
         volume = modal.Volume.from_name("agent-volume", create_if_missing=True)
+        logger.info("Modal volume 'agent-volume' accessed")
         task_path = f"tasks/{cfg.task_id}"
         dirs = []
 
         try:
+            logger.info("Checking existing tasks in Modal volume...")
             dirs = volume.listdir("/tasks")
             dirs = [d.path.split("/")[1] for d in dirs]
+            logger.info(f"Found existing tasks: {dirs}")
         except GRPCError:
+            logger.info("No existing tasks found, starting fresh upload...")
             with volume.batch_upload() as batch:
+                logger.info(f"Starting upload of {cfg.data_dir} to Modal volume...")
                 batch.put_directory(cfg.data_dir, task_path)
+                logger.info("Upload completed!")
             dirs.append(cfg.task_id)
 
         if cfg.task_id not in dirs:
+            logger.info(f"Task {cfg.task_id} not found in volume, uploading...")
             with volume.batch_upload() as batch:
+                logger.info(f"Starting upload of {cfg.data_dir} to Modal volume...")
                 batch.put_directory(cfg.data_dir, task_path)
+                logger.info("Upload completed!")
+        else:
+            logger.info(f"Task {cfg.task_id} already exists in volume, skipping upload")
 
     if cfg.preprocess_data:
+        logger.info("Starting data preprocessing...")
         preproc_data(cfg.workspace_dir / "input")
+        logger.info("Data preprocessing completed")
+    
+    logger.info("Agent workspace preparation completed!")
 
 
 def save_run(cfg: Config, journal: Journal):

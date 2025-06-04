@@ -13,6 +13,7 @@ from .utils import data_preview
 from .utils.config import Config
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import extract_code, extract_text_up_to_code, wrap_code
+import traceback
 
 logger = logging.getLogger("aide")
 
@@ -185,15 +186,32 @@ class Agent:
         self, prompt, user_messages=None, retries=3
     ) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
+        print(f"Making API call with model: {self.acfg.code.model}")
         completion_text = None
+        
         for _ in range(retries):
-            completion_text = query(
-                system_message=prompt,
-                user_messages=user_messages,
-                model=self.acfg.code.model,
-                temperature=self.acfg.code.temp,
-                convert_system_to_user=self.acfg.convert_system_to_user,
-            )
+            query_kwargs = {
+            "system_message": prompt,
+            "user_messages": user_messages,
+            "model": self.acfg.code.model,
+            "convert_system_to_user": self.acfg.convert_system_to_user,
+            }
+
+            if not self.acfg.code.model.startswith("o1-"):
+                try:
+                    query_kwargs["temperature"] = self.acfg.code.temp
+                except AttributeError:
+                    # Fallback if temp is not defined in config
+                    logger.warning("Temperature not defined in config, using default.")
+                    query_kwargs["temperature"] = 0.7  # Default temperature
+
+            # Call the query function with the constructed kwargs
+            raw_query_response_tuple = query(**query_kwargs)
+
+            logger.info(f"Raw response tuple from plan/code LLM call: {raw_query_response_tuple}")
+            completion_text = raw_query_response_tuple
+
+            print(f"API response received: {completion_text[:100]}...")
 
             code = extract_code(completion_text)
             nl_text = extract_text_up_to_code(completion_text)
@@ -228,8 +246,8 @@ class Agent:
             "Introduction": introduction,
             "Task description": self.task_desc,
         }
-
-        return query(
+        print(f"Making research API call with model: {self.acfg.advisor.model}")
+        result = query(
             system_message=prompt,
             user_messages=None,
             functions=[SearchArxiv, SearchPapersWithCode],
@@ -237,6 +255,8 @@ class Agent:
             temperature=self.acfg.advisor.temp,
             convert_system_to_user=self.acfg.convert_system_to_user,
         )
+        print(f"Research response received: {result[:100]}...")
+        return result
 
     def get_initial_research(self, redo=False):
 
@@ -298,47 +318,73 @@ class Agent:
         return advice
 
     def _draft(self, user_messages: List | None = None) -> Node:
-        advice = self._advisor()
-        introduction = (
-            "You are a Kaggle grandmaster attending a competition. "
-            "In order to win this competition, you need to come up with an excellent and creative plan "
-            "for a solution and then implement this solution in Python. We will now provide a description of the task."
-        )
-        if self.acfg.obfuscate:
+        try:
+            print("Starting _draft method")
+            
+            try:
+                advice = self._advisor()
+                print(f"Received advice: {advice[:100]}...")
+            except Exception as e:
+                print(f"Error in _advisor: {e}")
+                print(traceback.format_exc())
+                advice = "Error getting advice"
+
             introduction = (
-                "You are an expert machine learning engineer attempting a task. "
-                "In order to complete this task, you need to come up with an excellent and creative plan "
+                "You are a Kaggle grandmaster attending a competition. "
+                "In order to win this competition, you need to come up with an excellent and creative plan "
                 "for a solution and then implement this solution in Python. We will now provide a description of the task."
             )
-        prompt: Any = {
-            "Introduction": introduction,
-            "Task description": self.task_desc,
-            "Suggested Experiment by Advisor": advice,
-            "Memory": self.journal.generate_summary(),
-            "Instructions": {},
-        }
-        prompt["Instructions"] |= self._prompt_resp_fmt
-        prompt["Instructions"] |= {
-            "Solution sketch guideline": [
-                "This first solution design should be relatively simple, without ensembling or hyper-parameter optimization.",
-                "Take the Memory section into consideration when proposing the design,"
-                " don't propose the same modelling solution but keep the evaluation the same.",
-                "The solution sketch should be 3-5 sentences.",
-                "Propose an evaluation metric that is reasonable for this task.",
-                "Don't suggest to do EDA.",
-                "The data is already prepared and available in the `./input` directory. There is no need to unzip any files.",
-            ],
-        }
-        prompt["Instructions"] |= self._prompt_impl_guideline
-        prompt["Instructions"] |= self._prompt_environment
+            if self.acfg.obfuscate:
+                introduction = (
+                    "You are an expert machine learning engineer attempting a task. "
+                    "In order to complete this task, you need to come up with an excellent and creative plan "
+                    "for a solution and then implement this solution in Python. We will now provide a description of the task."
+                )
+            prompt: Any = {
+                "Introduction": introduction,
+                "Task description": self.task_desc,
+                "Suggested Experiment by Advisor": advice,
+                "Memory": self.journal.generate_summary(),
+                "Instructions": {},
+            }
+            prompt["Instructions"] |= self._prompt_resp_fmt
+            prompt["Instructions"] |= {
+                "Solution sketch guideline": [
+                    "This first solution design should be relatively simple, without ensembling or hyper-parameter optimization.",
+                    "Take the Memory section into consideration when proposing the design,"
+                    " don't propose the same modelling solution but keep the evaluation the same.",
+                    "The solution sketch should be 3-5 sentences.",
+                    "Propose an evaluation metric that is reasonable for this task.",
+                    "Don't suggest to do EDA.",
+                    "The data is already prepared and available in the `./input` directory. There is no need to unzip any files.",
+                ],
+            }
+            prompt["Instructions"] |= self._prompt_impl_guideline
+            prompt["Instructions"] |= self._prompt_environment
 
-        if self.acfg.data_preview:
-            prompt["Data Overview"] = self.data_preview
-        plan, code = self.plan_and_code_query(prompt, user_messages)
+            if self.acfg.data_preview:
+                prompt["Data Overview"] = self.data_preview
+            
+            try:
+                print(f"About to call plan_and_code_query with model: {self.acfg.code.model}")
+                plan, code = self.plan_and_code_query(prompt, user_messages)
+                print(f"Received plan: {plan[:50]}...")
+                print(f"Received code: {code[:50]}...")
+            except Exception as e:
+                print(f"Error in plan_and_code_query: {e}")
+                print(traceback.format_exc())
+                plan, code = "Error getting plan", "print('Error getting code')"
 
-        new_node = Node(plan=plan, code=code)
-        logger.info(f"Drafted new node {new_node.id}")
-        return new_node
+            new_node = Node(plan=plan, code=code)
+            print(f"Created new node with ID: {new_node.id}")
+
+            logger.info(f"Drafted new node {new_node.id}")
+            return new_node
+        except Exception as e:
+            print(f"Unexpected error in _draft: {e}")
+            print(traceback.format_exc())
+            return Node(plan="Error in draft", code="print('Error in draft')")
+
 
     def _improve(self, parent_node: Node, user_messages: List | None = None) -> Node:
         introduction = (
@@ -431,6 +477,8 @@ class Agent:
     async def step(self, exec_callback: ExecCallbackType = None, callback_manager=None):
         # clear the submission dir from previous steps
 
+        print(f"Starting agent step, current journal size: {len(self.journal.nodes)}")
+
         if not self.cfg.exec.use_modal:
             shutil.rmtree(self.cfg.workspace_dir / "submission", ignore_errors=True)
             (self.cfg.workspace_dir / "submission").mkdir(exist_ok=True)
@@ -441,9 +489,11 @@ class Agent:
             self.update_data_preview()
 
         parent_node = self.search_policy()
+        print(f"Search policy selected parent node: {parent_node}")
         logger.info(f"Agent is generating code, parent node type: {type(parent_node)}")
 
         if parent_node is None:
+            print("Drafting new node")
             await callback_manager.execute_callback(
                 "stage_start", "Draft", supress_errors=True
             )
@@ -452,6 +502,7 @@ class Agent:
                 "stage_end", "Draft", supress_errors=True
             )
         elif parent_node.is_buggy:
+            print(f"Debugging buggy node: {parent_node.id}")
             await callback_manager.execute_callback(
                 "stage_start", "Debug", supress_errors=True
             )
@@ -460,6 +511,7 @@ class Agent:
                 "stage_end", "Debug", supress_errors=True
             )
         else:
+            print(f"Improving node: {parent_node.id}")
             await callback_manager.execute_callback(
                 "stage_start", "Improve", supress_errors=True
             )
@@ -468,7 +520,9 @@ class Agent:
                 "stage_end", "Improve", supress_errors=True
             )
         if exec_callback:
+            print("Executing node code")
             exec_result = exec_callback(result_node.code)
+            print(f"Execution complete, error: {exec_result.exc_type}")
         else:
             exec_result = await callback_manager.execute_callback(
                 "exec", result_node.code
@@ -480,6 +534,7 @@ class Agent:
             callback_manager=callback_manager,
             use_modal=self.cfg.exec.use_modal,
         )
+        # print(f"Node processed, is_buggy: {result_node.is_buggy}, has metric: {result_node.metric is not None}")
         # TODO: Fix this to check submission when using modal. Also verify the cache_best_node function
         # handle final cases where we missed buggy nodes somehow
         if not result_node.is_buggy:
@@ -501,6 +556,7 @@ class Agent:
                     f"Actually, node {result_node.id} did not produce a submission.csv"
                 )
         self.journal.append(result_node)
+        print(f"Step complete, journal now has {len(self.journal.nodes)} nodes")
 
         # if the result_node is the best node, cache its submission.csv and solution.py
         # to best_solution/ by copying it there
@@ -566,7 +622,7 @@ class Agent:
                 )
                 # install missing libraries
                 await callback_manager.execute_callback(
-                    "install_dependecies", response.missing_libraries
+                    "install_dependencies", response.missing_libraries
                 )
 
                 # Re-execute the code after installing libraries

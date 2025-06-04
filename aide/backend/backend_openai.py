@@ -20,6 +20,16 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from aide.function import get_function
 
+import httpx
+import os
+
+# Add at top of backend_openai.py
+print("OpenAI configuration:", dir(openai))
+print("OpenAI version:", openai.__version__)
+
+print("HTTP_PROXY:", os.environ.get("HTTP_PROXY"))
+print("HTTPS_PROXY:", os.environ.get("HTTPS_PROXY"))
+
 
 logger = logging.getLogger("aide")
 
@@ -37,7 +47,20 @@ OPENAI_TIMEOUT_EXCEPTIONS = (
 @once
 def _setup_openai_client():
     global _client
-    _client = openai.OpenAI(max_retries=0)
+    try:
+        custom_http_client = httpx.Client(trust_env=False) 
+        _client = openai.OpenAI(http_client=custom_http_client, max_retries=0)
+        print("OpenAI client initialized with custom httpx.Client (proxies explicitly set to None).")
+        logger.info("OpenAI client initialized with custom httpx.Client (proxies explicitly set to None).")
+    except TypeError as e:
+        logger.error(f"Error initializing OpenAI client with custom httpx_client: {e}")
+        try:
+            # Try without parameters
+            _client = openai.OpenAI(max_retries=0)
+            logger.warning("OpenAI client falling back to default initialization after custom httpx_client failed.")
+        except Exception as e2:
+            logger.error(f"Failed to initialize OpenAI client: {e2}")
+            _client = None
 
 
 def get_tool_message(tool_call_id: str, name: str, argments: dict) -> dict:
@@ -69,6 +92,9 @@ def query(
     **model_kwargs,
 ) -> tuple[OutputType, float, int, int, dict]:
     _setup_openai_client()
+    if _client is None:
+        logger.error("OpenAI client initialization failed")
+        return "Error: Could not initialize OpenAI client", 0, 0, 0, {}
     filtered_kwargs: dict = select_values(notnone, model_kwargs)  # type: ignore
 
     messages = opt_messages_to_list(
@@ -112,6 +138,7 @@ def query(
         else:
             tool_results = []
             for tool_call in choice.message.tool_calls:
+                logger.info(f"LLM requested tool call with name: '{tool_call.function.name}'") # DEBUG PRINT
                 func = get_function(tool_call.function.name)
                 if func is None:
                     action_cls = get_action(tool_call.function.name)

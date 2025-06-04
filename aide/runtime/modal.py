@@ -158,26 +158,48 @@ class ModalRuntime(Runtime):
         # Create best solution and submission directories in sandboxed env
         best_solution_dir = f"{self.modal_working_dir}/best_solution"
         best_submission_dir = f"{self.modal_working_dir}/best_submission"
+        
+            # Check if directories exist and create them if they don't
+        try:
+            dir_listings = self.process.ls(".")
+            if "best_solution" not in dir_listings:
+                self.process.mkdir(best_solution_dir, parents=True)
+            if "best_submission" not in dir_listings:
+                self.process.mkdir(best_submission_dir, parents=True)
+        except Exception as e:
+            logger.error(f"Error checking/creating directories: {str(e)}")
+            # Continue anyway - if the directories already exist, we can still try to write files
 
-        self.process.mkdir(best_solution_dir, exist_ok=True)
-        self.process.mkdir(best_submission_dir, exist_ok=True)
+        # # Failing cause no exist_ok directory for Modal sandbox mkdir 
+        # self.process.mkdir(best_solution_dir, exist_ok=True)
+        # self.process.mkdir(best_submission_dir, exist_ok=True)
 
         # Copy submission file using modal sandbox
-        self.process.exec(
-            "cp",
-            f"{self.modal_working_dir}/submission/submission.csv",
-            best_submission_dir,
-        )
+        try:
+            self.process.exec(
+                "cp",
+                f"{self.modal_working_dir}/submission/submission.csv",
+                best_submission_dir,
+            )
+        except Exception as e:
+            logger.error(f"Error copying submission file: {str(e)}")
 
         # Save solution code
-        f = self.process.open(f"{best_solution_dir}/solution.py", "w")
-        f.write(node.code)
-        f.close()
+        try:
+            f = self.process.open(f"{best_solution_dir}/solution.py", "w")
+            f.write(node.code)
+            f.close()
+        except Exception as e:
+            logger.error(f"Error saving solution code: {str(e)}")
+
 
         # Save node ID
-        f = self.process.open(f"{best_solution_dir}/node_id.txt", "w")
-        f.write(str(node.id))
-        f.close()
+        try: 
+            f = self.process.open(f"{best_solution_dir}/node_id.txt", "w")
+            f.write(str(node.id))
+            f.close()
+        except Exception as e:
+            logger.error(f"Error saving node ID: {str(e)}")
 
     async def install_missing_libraries(self, missing_libraries: list[str]):
         for library in missing_libraries:
