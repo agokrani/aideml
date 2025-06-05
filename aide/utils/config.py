@@ -12,13 +12,11 @@ from omegaconf import OmegaConf
 from rich.syntax import Syntax
 import shutup
 import logging
-from grpclib import GRPCError
 
 from aide.journal import Journal, filter_journal
 
 from . import tree_export
-from . import copytree, preproc_data, serialize
-import modal
+from . import preproc_data, serialize
 
 shutup.mute_warnings()
 logger = logging.getLogger("aide")
@@ -66,6 +64,15 @@ class AgentConfig:
 
 
 @dataclass
+class DataConfig:
+    """Configuration for data sources."""
+    provider: str     # "huggingface", "kaggle", "local"
+    dataset: str      # dataset name  
+    path: Path | None = None  # only for local provider
+    dataset_kwargs: dict | None = None  # additional kwargs for dataset loading
+
+
+@dataclass
 class ExecConfig:
     timeout: int
     agent_file_name: str
@@ -78,29 +85,26 @@ class ExecConfig:
 
 @dataclass
 class Config(Hashable):
-    data_dir: Path
-    desc_file: Path | None
-
-    goal: str | None
-    eval: str | None
-
+    # Required fields first
     log_dir: Path
     log_level: str
     workspace_dir: Path
     debug: bool
-
     preprocess_data: bool
     copy_data: bool
-
     exp_name: str
-
     initial_solution: InitialSolutionConfig
-
     exec: ExecConfig
     generate_report: bool
     report: StageConfig
     agent: AgentConfig
 
+    # Optional fields with defaults
+    data_dir: Path | None = None
+    desc_file: Path | None = None
+    data: DataConfig | None = None
+    goal: str | None = None
+    eval: str | None = None
     task_id: str | None = None
 
 
@@ -138,17 +142,35 @@ def prep_cfg(cfg: Config):
     if "--config-path" in cfg.keys():
         cfg.pop("--config-path")
 
-    if cfg.data_dir is None:
-        raise ValueError("`data_dir` must be provided.")
+    # Handle legacy data_dir path resolution
+    if "data_dir" in cfg:
+        if cfg.data_dir: 
+            if str(cfg.data_dir).startswith("example_tasks/"):
+                cfg.data_dir = Path(__file__).parent.parent.parent / cfg.data_dir
+            cfg.data_dir = Path(cfg.data_dir).resolve()
+
+            # Handle legacy config format 
+            if "data" not in cfg or not cfg.data:
+                cfg.data = DataConfig(
+                    provider="local",
+                    dataset="legacy",  # placeholder
+                    path=cfg.data_dir
+                )
+
+    # Validation - need either new data config or legacy data_dir
+    if not cfg.data and not "data_dir" in cfg:
+        raise ValueError("Must specify either 'data_dir' or 'data' configuration.")
 
     if cfg.desc_file is None and cfg.goal is None:
         raise ValueError(
             "You must provide either a description of the task goal (`goal=...`) or a path to a plaintext file containing the description (`desc_file=...`)."
         )
 
-    if cfg.data_dir.startswith("example_tasks/"):
-        cfg.data_dir = Path(__file__).parent.parent.parent / cfg.data_dir
-    cfg.data_dir = Path(cfg.data_dir).resolve()
+    # Handle new data config path resolution for local provider
+    if cfg.data and cfg.data.provider == "local" and cfg.data.path:
+        if str(cfg.data.path).startswith("example_tasks/"):
+            cfg.data.path = Path(__file__).parent.parent.parent / cfg.data.path
+        cfg.data.path = Path(cfg.data.path).resolve()
 
     if cfg.desc_file is not None:
         cfg.desc_file = Path(cfg.desc_file).resolve()
@@ -203,33 +225,39 @@ def load_task_desc(cfg: Config):
 
 
 def prep_agent_workspace(cfg: Config):
-    """Setup the agent's workspace and preprocess data if necessary."""
+    """Setup the agent's workspace and prepare data."""
+    from ..data_providers import create_data_provider
+    
+    # Setup local workspace directories
     (cfg.workspace_dir / "input").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "submission").mkdir(parents=True, exist_ok=True)
 
-    copytree(cfg.data_dir, cfg.workspace_dir / "input", use_symlinks=not cfg.copy_data)
-
+    # Get data provider
+    provider = create_data_provider(cfg)
+    
+    # Prepare data based on execution environment
     if cfg.exec.use_modal:
+        logger.info("Modal runtime detected - preparing Modal volume...")
         assert cfg.task_id is not None, "Task ID must be provided for Modal runtime"
-        volume = modal.Volume.from_name("agent-volume", create_if_missing=True)
-        task_path = f"tasks/{cfg.task_id}"
-        dirs = []
-
-        try:
-            dirs = volume.listdir("/tasks")
-            dirs = [d.path.split("/")[1] for d in dirs]
-        except GRPCError:
-            with volume.batch_upload() as batch:
-                batch.put_directory(cfg.data_dir, task_path)
-            dirs.append(cfg.task_id)
-
-        if cfg.task_id not in dirs:
-            with volume.batch_upload() as batch:
-                batch.put_directory(cfg.data_dir, task_path)
-
+        
+        # Modal execution: prepare data in Modal volume
+        provider.prepare_modal_data(cfg.task_id, dataset_kwargs=cfg.data.dataset_kwargs)
+    else:
+        # Local execution only
+        provider.prepare_local_data(
+            cfg.workspace_dir / "input",
+            use_symlinks=not cfg.copy_data,
+            dataset_kwargs=cfg.data.dataset_kwargs
+        )
+    
+    # Preprocess data
     if cfg.preprocess_data:
+        logger.info("Starting data preprocessing...")
         preproc_data(cfg.workspace_dir / "input")
+        logger.info("Data preprocessing completed")
+    
+    logger.info("Agent workspace preparation completed!")
 
 
 def save_run(cfg: Config, journal: Journal):

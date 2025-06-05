@@ -26,6 +26,7 @@ class ModalRuntime(Runtime):
         volume_name="agent-volume",
         agent_file_name: str = "runfile.py",
         debug: bool = True,
+        use_symlinks: bool = False
     ):
         self.working_dir = Path(working_dir).resolve()
         assert (
@@ -47,8 +48,10 @@ class ModalRuntime(Runtime):
                     Path(__file__).parent.parent / "utils" / "__init__.py",
                     self.preprocess_script,
                 )
+        self.use_symlinks = use_symlinks
         self.process = self._create_sandbox()  # type: ignore
         self.debug = debug
+        
 
     def _create_sandbox(self) -> modal.Sandbox:
         agent_image = modal.Image.debian_slim(
@@ -58,7 +61,6 @@ class ModalRuntime(Runtime):
         )
 
         self.app = modal.App.lookup("aide-agent", create_if_missing=True)
-
         sandbox = modal.Sandbox.create(
             image=agent_image,
             timeout=self.timeout,
@@ -74,8 +76,14 @@ class ModalRuntime(Runtime):
 
         workdir_ls = sandbox.ls(".")
         if "input" not in workdir_ls:
-            res = sandbox.exec("cp", "-r", f"/vol/tasks/{self.task_id}", "input")
-            res.wait()
+            if not self.use_symlinks:
+                res = sandbox.exec("cp", "-r", f"/vol/tasks/{self.task_id}", "input")
+                res.wait()
+            else: 
+                res = sandbox.exec(
+                    "ln", "-s", f"/vol/tasks/{self.task_id}", "input"
+                )
+                res.wait()
             if self.preprocess_data:
                 res = sandbox.exec(
                     "python", self.preprocess_script, f"{self.modal_working_dir}/input"

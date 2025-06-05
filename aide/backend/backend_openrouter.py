@@ -1,6 +1,7 @@
 """Backend for OpenRouter API"""
 
 import logging
+import httpx
 import os
 import time
 from typing import List
@@ -28,11 +29,18 @@ OPENAI_TIMEOUT_EXCEPTIONS = (
 @once
 def _setup_openrouter_client():
     global _client
-    _client = openai.OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        max_retries=0,
-    )
+    try:
+        custom_http_client = httpx.Client(trust_env=False) 
+        _client = openai.OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            max_retries=0,
+            http_client=custom_http_client
+        )
+        logger.info("OpenRouter client initialized with custom httpx.Client (trust_env=False).")
+    except Exception as e:
+        logger.error(f"Error initializing OpenRouter client: {e}")
+        _client = None
 
 
 def query(
