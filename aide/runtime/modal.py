@@ -157,9 +157,11 @@ class ModalRuntime(Runtime):
         return ExecutionResult(output, exec_time, None, None, None)
 
     def has_submission(self):
-        if "submission.csv" in self.process.ls("submission"):
-            return True
-        return False
+        try:
+            files = self.process.ls("submission")
+            return len(files) > 0
+        except:
+            return False
 
     async def cache_best_node(self, node: Node):
         """Cache the best node's submission and solution files for modal runtime."""
@@ -186,11 +188,12 @@ class ModalRuntime(Runtime):
         try:
             self.process.exec(
                 "cp",
-                f"{self.modal_working_dir}/submission/submission.csv",
+                "-r",
+                f"{self.modal_working_dir}/submission/*",
                 best_submission_dir,
             )
         except Exception as e:
-            logger.error(f"Error copying submission file: {str(e)}")
+            logger.error(f"Error copying submission files: {str(e)}")
 
         # Save solution code
         try:

@@ -280,11 +280,12 @@ def cache_best_node(node: Node, working_dir: Path | str) -> None:
     best_submission_dir = working_dir / "best_submission"
     best_submission_dir.mkdir(exist_ok=True, parents=True)
 
-    # Copy submission file
-    shutil.copy(
-        working_dir / "submission" / "submission.csv",
-        best_submission_dir,
-    )
+    # Copy all submission files
+    submission_dir = working_dir / "submission"
+    if submission_dir.exists():
+        for file_path in submission_dir.iterdir():
+            if file_path.is_file():
+                shutil.copy(file_path, best_submission_dir)
 
     # Save solution code
     with open(best_solution_dir / "solution.py", "w") as f:

@@ -14,6 +14,8 @@ from .utils.config import Config
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import extract_code, extract_text_up_to_code, wrap_code
 from .utils.util import load_prompt
+import traceback
+from pathlib import Path
 
 logger = logging.getLogger("aide")
 
@@ -52,14 +54,17 @@ class ActionAgent:
 
         user_messages[:0] = recent_messages
 
-        response = query(
-            system_message=prompt,
-            user_messages=user_messages,
-            model=self.acfg.copilot.model,
-            temperature=self.acfg.copilot.temp,
-            functions=[Debug, Draft, Improve, Finish],
-            convert_system_to_user=self.acfg.convert_system_to_user,
-        )
+        query_kwargs = {
+            "system_message": prompt,
+            "user_messages": user_messages,  # Pass the actual user messages
+            "functions": [Debug, Draft, Improve, Finish],  # The action functions
+            "model": self.acfg.copilot.model,  # Use copilot model
+            "convert_system_to_user": self.acfg.convert_system_to_user,
+            "temperature": self.acfg.copilot.temp
+        }
+
+        response = query(**query_kwargs)
+
         self.message_history.append(response.get_tool_message())
 
         return response
@@ -119,32 +124,24 @@ class Agent:
         self, prompt, user_messages=None, retries=3
     ) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
-        print(f"Making API call with model: {self.acfg.code.model}")
+        logger(f"Making API call with model: {self.acfg.code.model}")
         completion_text = None
         
         for _ in range(retries):
             query_kwargs = {
-            "system_message": prompt,
-            "user_messages": user_messages,
-            "model": self.acfg.code.model,
-            "convert_system_to_user": self.acfg.convert_system_to_user,
+                "system_message": prompt,
+                "user_messages": user_messages,
+                "model": self.acfg.code.model,
+                "convert_system_to_user": self.acfg.convert_system_to_user,
+                "temperature": self.acfg.code.temp
             }
-
-            if not self.acfg.code.model.startswith("o1-"):
-                try:
-                    query_kwargs["temperature"] = self.acfg.code.temp
-                except AttributeError:
-                    # Fallback if temp is not defined in config
-                    logger.warning("Temperature not defined in config, using default.")
-                    query_kwargs["temperature"] = 0.7  # Default temperature
-
+                        
             # Call the query function with the constructed kwargs
             raw_query_response_tuple = query(**query_kwargs)
 
             logger.info(f"Raw response tuple from plan/code LLM call: {raw_query_response_tuple}")
             completion_text = raw_query_response_tuple
-
-            print(f"API response received: {completion_text[:100]}...")
+            logger(f"API response received: {completion_text[:100]}...")
 
             code = extract_code(completion_text)
             nl_text = extract_text_up_to_code(completion_text)
@@ -169,13 +166,15 @@ class Agent:
                     logger.warning(f"No prompt configuration found for {stage}/planning, returning empty plan")
                     return ""
                 
-                plan_text = query(
-                    system_message=prompt,
-                    user_messages=user_messages,
-                    model=self.acfg.code.model,
-                    temperature=self.acfg.code.temp,
-                    convert_system_to_user=self.acfg.convert_system_to_user,
-                )
+                query_kwargs = {
+                    "system_message": prompt,
+                    "user_messages": user_messages,
+                    "model": self.acfg.code.model,
+                    "convert_system_to_user": self.acfg.convert_system_to_user,
+                    "temperature": self.acfg.code.temp
+                }
+                
+                plan_text = query(**query_kwargs)
                 
                 # Validate that we got a reasonable plan
                 if plan_text and len(plan_text.strip()) > 10:
@@ -203,14 +202,16 @@ class Agent:
                 if not prompt:
                     logger.warning(f"No prompt configuration found for {stage}/coding, using fallback")
                     return ""
+
+                query_kwargs = {
+                    "system_message": prompt,
+                    "user_messages": user_messages,
+                    "model": self.acfg.code.model,
+                    "convert_system_to_user": self.acfg.convert_system_to_user,
+                    "temperature": self.acfg.code.temp
+                }
                 
-                completion_text = query(
-                    system_message=prompt,
-                    user_messages=user_messages,
-                    model=self.acfg.code.model,
-                    temperature=self.acfg.code.temp,
-                    convert_system_to_user=self.acfg.convert_system_to_user,
-                )
+                completion_text = query(**query_kwargs)
                 
                 # Extract code from response
                 code = extract_code(completion_text)
@@ -374,17 +375,25 @@ class Agent:
                 submission_exists = await callback_manager.execute_callback(
                     "has_submission"
                 )
-            elif not (
-                self.cfg.workspace_dir / "submission" / "submission.csv"
-            ).exists():
-                submission_exists = False
             else:
-                submission_exists = True
+                submission_dir = self.cfg.workspace_dir / "submission"
+                logger.info(f"DEBUG (step method): Checking submission directory: {submission_dir.resolve()}")
+                if submission_dir.exists():
+                    contents = list(submission_dir.iterdir())
+                    logger.info(f"DEBUG (step method): Submission directory exists. Contents: {[p.name for p in contents]}")
+                    if not contents:
+                        logger.info("DEBUG (step method): Submission directory is EMPTY.")
+                    if any(submission_dir.iterdir()):
+                        submission_exists = True
+                else:
+                    submission_exists = False
+                    logger.info("DEBUG (step method): Submission directory does NOT exist.")
+            
             if not submission_exists:
                 result_node.is_buggy = True
                 result_node.metric = WorstMetricValue()
                 logger.info(
-                    f"Actually, node {result_node.id} did not produce a submission.csv"
+                    f"Actually, node {result_node.id} did not produce a submission directory."
                 )
         self.journal.append(result_node)
         print(f"Step complete, journal now has {len(self.journal.nodes)} nodes")
@@ -413,6 +422,8 @@ class Agent:
     ) -> Node:
         logger.info(f"Agent is parsing execution results for node {node.id}")
         node.absorb_exec_result(exec_result)
+
+        logger.info(f"DEBUG (parse_exec_result): exec_result.term_out for node {node.id} (attempt {attempts}):\n{''.join(exec_result.term_out)}")
 
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
@@ -487,21 +498,27 @@ class Agent:
             response.metric = None
         # do an extra check, to catch cases where judge fails
         if use_modal:
-            has_csv_submission = await callback_manager.execute_callback(
+            has_any_submission = await callback_manager.execute_callback(
                 "has_submission"
             )
         else:
-            has_csv_submission = (
-                self.cfg.workspace_dir / "submission" / "submission.csv"
-            ).exists()
+            submission_dir = self.cfg.workspace_dir / "submission"
+            logger.info(f"DEBUG (parse_exec_result): Checking submission directory: {submission_dir.resolve()}")
+            if submission_dir.exists():
+                contents = list(submission_dir.iterdir())
+                logger.info(f"DEBUG (parse_exec_result): Submission directory exists. Contents: {[p.name for p in contents]}")
+                if not contents:
+                    logger.info("DEBUG (parse_exec_result): Submission directory is EMPTY.")
+            else:
+                logger.info("DEBUG (parse_exec_result): Submission directory does NOT exist.")
+            has_any_submission = submission_dir.exists() and any(submission_dir.iterdir())
 
         node.analysis = response.summary
         node.is_buggy = (
             response.is_bug
             or node.exc_type is not None
             or response.metric is None
-            or not response.has_csv_submission
-            or not has_csv_submission
+            or not has_any_submission
         )
 
         if node.is_buggy:

@@ -20,18 +20,18 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from aide.function import get_function
 
+logger = logging.getLogger("aide")
+
 import httpx
 import os
 
 # Add at top of backend_openai.py
-print("OpenAI configuration:", dir(openai))
-print("OpenAI version:", openai.__version__)
+logger.info("OpenAI configuration:", dir(openai))
+logger.info("OpenAI version:", openai.__version__)
 
-print("HTTP_PROXY:", os.environ.get("HTTP_PROXY"))
-print("HTTPS_PROXY:", os.environ.get("HTTPS_PROXY"))
+logger.info("HTTP_PROXY:", os.environ.get("HTTP_PROXY"))
+logger.info("HTTPS_PROXY:", os.environ.get("HTTPS_PROXY"))
 
-
-logger = logging.getLogger("aide")
 
 _client: openai.OpenAI = None  # type: ignore
 
@@ -43,10 +43,12 @@ OPENAI_TIMEOUT_EXCEPTIONS = (
     openai.InternalServerError,
 )
 
+import os
 
 @once
 def _setup_openai_client():
     global _client
+    
     try:
         custom_http_client = httpx.Client(trust_env=False) 
         _client = openai.OpenAI(http_client=custom_http_client, max_retries=0)
