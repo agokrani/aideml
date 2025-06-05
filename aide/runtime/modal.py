@@ -160,7 +160,7 @@ class ModalRuntime(Runtime):
         try:
             files = self.process.ls("submission")
             return len(files) > 0
-        except:
+        except Exception:
             return False
 
     async def cache_best_node(self, node: Node):

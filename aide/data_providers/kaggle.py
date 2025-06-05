@@ -1,7 +1,6 @@
 """Kaggle data provider for datasets from Kaggle."""
 
 from pathlib import Path
-from typing import Dict, Any
 import logging
 
 from .base import DataProvider

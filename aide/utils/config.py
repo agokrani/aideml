@@ -158,7 +158,7 @@ def prep_cfg(cfg: Config):
                 )
 
     # Validation - need either new data config or legacy data_dir
-    if not cfg.data and not "data_dir" in cfg:
+    if not cfg.data and "data_dir" not in cfg:
         raise ValueError("Must specify either 'data_dir' or 'data' configuration.")
 
     if cfg.desc_file is None and cfg.goal is None:

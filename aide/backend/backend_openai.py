@@ -5,6 +5,9 @@ import logging
 import time
 import openai
 
+import httpx
+import os
+
 from pydantic import BaseModel
 from typing import Any, Dict, Type, Union, List
 
@@ -22,8 +25,6 @@ from aide.function import get_function
 
 logger = logging.getLogger("aide")
 
-import httpx
-import os
 
 # Add at top of backend_openai.py
 logger.info("OpenAI configuration:", dir(openai))
@@ -43,7 +44,6 @@ OPENAI_TIMEOUT_EXCEPTIONS = (
     openai.InternalServerError,
 )
 
-import os
 
 @once
 def _setup_openai_client():

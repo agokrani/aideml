@@ -1,7 +1,6 @@
 """Local data provider for filesystem-based data."""
 
 from pathlib import Path
-from typing import Dict, Any
 import logging
 
 from .base import DataProvider

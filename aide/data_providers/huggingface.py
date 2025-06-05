@@ -1,7 +1,6 @@
 """HuggingFace data provider for datasets from Hugging Face Hub."""
 
 from pathlib import Path
-from typing import Dict, Any
 import logging
 
 from .base import DataProvider

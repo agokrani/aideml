@@ -4,7 +4,6 @@ import random
 import time
 from typing import Any, Callable, List
 import humanize
-from aide.function import SearchArxiv, SearchPapersWithCode
 from aide.actions import Debug, Draft, Improve, Finish, SubmitReview
 from .backend import query
 from .utils.execution_result import ExecutionResult
@@ -14,8 +13,6 @@ from .utils.config import Config
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import extract_code, extract_text_up_to_code, wrap_code
 from .utils.util import load_prompt
-import traceback
-from pathlib import Path
 
 logger = logging.getLogger("aide")
 
