@@ -48,18 +48,24 @@ OPENAI_TIMEOUT_EXCEPTIONS = (
 @once
 def _setup_openai_client():
     global _client
-    
+
     try:
-        custom_http_client = httpx.Client(trust_env=False) 
+        custom_http_client = httpx.Client(trust_env=False)
         _client = openai.OpenAI(http_client=custom_http_client, max_retries=0)
-        print("OpenAI client initialized with custom httpx.Client (proxies explicitly set to None).")
-        logger.info("OpenAI client initialized with custom httpx.Client (proxies explicitly set to None).")
+        print(
+            "OpenAI client initialized with custom httpx.Client (proxies explicitly set to None)."
+        )
+        logger.info(
+            "OpenAI client initialized with custom httpx.Client (proxies explicitly set to None)."
+        )
     except TypeError as e:
         logger.error(f"Error initializing OpenAI client with custom httpx_client: {e}")
         try:
             # Try without parameters
             _client = openai.OpenAI(max_retries=0)
-            logger.warning("OpenAI client falling back to default initialization after custom httpx_client failed.")
+            logger.warning(
+                "OpenAI client falling back to default initialization after custom httpx_client failed."
+            )
         except Exception as e2:
             logger.error(f"Failed to initialize OpenAI client: {e2}")
             _client = None
@@ -140,7 +146,9 @@ def query(
         else:
             tool_results = []
             for tool_call in choice.message.tool_calls:
-                logger.info(f"LLM requested tool call with name: '{tool_call.function.name}'") # DEBUG PRINT
+                logger.info(
+                    f"LLM requested tool call with name: '{tool_call.function.name}'"
+                )  # DEBUG PRINT
                 func = get_function(tool_call.function.name)
                 if func is None:
                     action_cls = get_action(tool_call.function.name)

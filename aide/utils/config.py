@@ -66,8 +66,9 @@ class AgentConfig:
 @dataclass
 class DataConfig:
     """Configuration for data sources."""
-    provider: str     # "huggingface", "kaggle", "local"
-    dataset: str      # dataset name  
+
+    provider: str  # "huggingface", "kaggle", "local"
+    dataset: str  # dataset name
     path: Path | None = None  # only for local provider
     dataset_kwargs: dict | None = None  # additional kwargs for dataset loading
 
@@ -144,17 +145,15 @@ def prep_cfg(cfg: Config):
 
     # Handle legacy data_dir path resolution
     if "data_dir" in cfg:
-        if cfg.data_dir: 
+        if cfg.data_dir:
             if str(cfg.data_dir).startswith("example_tasks/"):
                 cfg.data_dir = Path(__file__).parent.parent.parent / cfg.data_dir
             cfg.data_dir = Path(cfg.data_dir).resolve()
 
-            # Handle legacy config format 
+            # Handle legacy config format
             if "data" not in cfg or not cfg.data:
                 cfg.data = DataConfig(
-                    provider="local",
-                    dataset="legacy",  # placeholder
-                    path=cfg.data_dir
+                    provider="local", dataset="legacy", path=cfg.data_dir  # placeholder
                 )
 
     # Validation - need either new data config or legacy data_dir
@@ -227,7 +226,7 @@ def load_task_desc(cfg: Config):
 def prep_agent_workspace(cfg: Config):
     """Setup the agent's workspace and prepare data."""
     from ..data_providers import create_data_provider
-    
+
     # Setup local workspace directories
     (cfg.workspace_dir / "input").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
@@ -235,12 +234,12 @@ def prep_agent_workspace(cfg: Config):
 
     # Get data provider
     provider = create_data_provider(cfg)
-    
+
     # Prepare data based on execution environment
     if cfg.exec.use_modal:
         logger.info("Modal runtime detected - preparing Modal volume...")
         assert cfg.task_id is not None, "Task ID must be provided for Modal runtime"
-        
+
         # Modal execution: prepare data in Modal volume
         provider.prepare_modal_data(cfg.task_id, dataset_kwargs=cfg.data.dataset_kwargs)
     else:
@@ -248,15 +247,15 @@ def prep_agent_workspace(cfg: Config):
         provider.prepare_local_data(
             cfg.workspace_dir / "input",
             use_symlinks=not cfg.copy_data,
-            dataset_kwargs=cfg.data.dataset_kwargs
+            dataset_kwargs=cfg.data.dataset_kwargs,
         )
-    
+
     # Preprocess data
     if cfg.preprocess_data:
         logger.info("Starting data preprocessing...")
         preproc_data(cfg.workspace_dir / "input")
         logger.info("Data preprocessing completed")
-    
+
     logger.info("Agent workspace preparation completed!")
 
 

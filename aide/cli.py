@@ -124,7 +124,7 @@ def start(mode, config_path=None):
         cfg.exec,
         task_id=cfg.task_id,
         preprocess_data=cfg.preprocess_data,
-        use_symlinks=not cfg.copy_data
+        use_symlinks=not cfg.copy_data,
     )
     stage_end()
 

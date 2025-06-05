@@ -267,13 +267,15 @@ class WebUI:
             self.set_api_keys()
 
             print("Quick check for if API Key has been set.")
-            print(f"OpenAI API Key present: {os.environ.get('OPENAI_API_KEY') is not None}")
+            print(
+                f"OpenAI API Key present: {os.environ.get('OPENAI_API_KEY') is not None}"
+            )
 
             input_dir = self.prepare_input_directory(files)
-            
+
             if not input_dir:
                 return None
-            else: 
+            else:
                 print(f"Input directory contents: {os.listdir(input_dir)}")
 
             experiment = self.initialize_experiment(input_dir, goal_text, eval_text)

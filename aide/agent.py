@@ -57,7 +57,7 @@ class ActionAgent:
             "functions": [Debug, Draft, Improve, Finish],  # The action functions
             "model": self.acfg.copilot.model,  # Use copilot model
             "convert_system_to_user": self.acfg.convert_system_to_user,
-            "temperature": self.acfg.copilot.temp
+            "temperature": self.acfg.copilot.temp,
         }
 
         response = query(**query_kwargs)
@@ -123,20 +123,22 @@ class Agent:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         logger(f"Making API call with model: {self.acfg.code.model}")
         completion_text = None
-        
+
         for _ in range(retries):
             query_kwargs = {
                 "system_message": prompt,
                 "user_messages": user_messages,
                 "model": self.acfg.code.model,
                 "convert_system_to_user": self.acfg.convert_system_to_user,
-                "temperature": self.acfg.code.temp
+                "temperature": self.acfg.code.temp,
             }
-                        
+
             # Call the query function with the constructed kwargs
             raw_query_response_tuple = query(**query_kwargs)
 
-            logger.info(f"Raw response tuple from plan/code LLM call: {raw_query_response_tuple}")
+            logger.info(
+                f"Raw response tuple from plan/code LLM call: {raw_query_response_tuple}"
+            )
             completion_text = raw_query_response_tuple
             logger(f"API response received: {completion_text[:100]}...")
 
@@ -156,48 +158,60 @@ class Agent:
         for attempt in range(retries):
             try:
                 # Load prompt from external files
-                prompt = load_prompt(stage, "planning", obfuscate=self.acfg.obfuscate, **variables)
-                
+                prompt = load_prompt(
+                    stage, "planning", obfuscate=self.acfg.obfuscate, **variables
+                )
+
                 # If prompt loading failed (no files), return empty plan
                 if not prompt:
-                    logger.warning(f"No prompt configuration found for {stage}/planning, returning empty plan")
+                    logger.warning(
+                        f"No prompt configuration found for {stage}/planning, returning empty plan"
+                    )
                     return ""
-                
+
                 query_kwargs = {
                     "system_message": prompt,
                     "user_messages": user_messages,
                     "model": self.acfg.code.model,
                     "convert_system_to_user": self.acfg.convert_system_to_user,
-                    "temperature": self.acfg.code.temp
+                    "temperature": self.acfg.code.temp,
                 }
-                
+
                 plan_text = query(**query_kwargs)
-                
+
                 # Validate that we got a reasonable plan
                 if plan_text and len(plan_text.strip()) > 10:
                     return plan_text.strip()
-                
-                logger.info(f"Plan generation failed on attempt {attempt + 1}, retrying...")
-                
+
+                logger.info(
+                    f"Plan generation failed on attempt {attempt + 1}, retrying..."
+                )
+
             except Exception as e:
                 logger.warning(f"Plan query failed on attempt {attempt + 1}: {e}")
-                
+
         logger.info("Final plan generation attempt failed, returning empty plan")
         return ""
 
-    def code_query(self, stage: str, plan: str, user_messages=None, retries=3, **variables) -> str:
+    def code_query(
+        self, stage: str, plan: str, user_messages=None, retries=3, **variables
+    ) -> str:
         """Generate code implementing the provided plan using external prompt configuration."""
         for attempt in range(retries):
             try:
                 # Add plan to variables
                 variables["plan"] = plan
-                
+
                 # Load prompt from external files
-                prompt = load_prompt(stage, "coding", obfuscate=self.acfg.obfuscate, **variables)
-                
+                prompt = load_prompt(
+                    stage, "coding", obfuscate=self.acfg.obfuscate, **variables
+                )
+
                 # If prompt loading failed (no files), fall back to old behavior
                 if not prompt:
-                    logger.warning(f"No prompt configuration found for {stage}/coding, using fallback")
+                    logger.warning(
+                        f"No prompt configuration found for {stage}/coding, using fallback"
+                    )
                     return ""
 
                 query_kwargs = {
@@ -205,24 +219,26 @@ class Agent:
                     "user_messages": user_messages,
                     "model": self.acfg.code.model,
                     "convert_system_to_user": self.acfg.convert_system_to_user,
-                    "temperature": self.acfg.code.temp
+                    "temperature": self.acfg.code.temp,
                 }
-                
+
                 completion_text = query(**query_kwargs)
-                
+
                 # Extract code from response
                 code = extract_code(completion_text)
-                
+
                 if code:
                     return code
-                
-                logger.info(f"Code extraction failed on attempt {attempt + 1}, retrying...")
-                
+
+                logger.info(
+                    f"Code extraction failed on attempt {attempt + 1}, retrying..."
+                )
+
             except Exception as e:
                 logger.warning(f"Code query failed on attempt {attempt + 1}: {e}")
-                
+
         logger.info("Final code generation attempt failed, returning completion text")
-        return completion_text if 'completion_text' in locals() else ""
+        return completion_text if "completion_text" in locals() else ""
 
     def _draft(self, user_messages: List | None = None) -> Node:
         # Prepare variables for external prompts
@@ -230,23 +246,31 @@ class Agent:
             "task_desc": self.task_desc,
             "memory": self.journal.generate_summary(),
             "data_preview": self.data_preview if self.acfg.data_preview else "",
-            "time_remaining": format_time(self.acfg.time_limit - (time.time() - self.start_time)),
+            "time_remaining": format_time(
+                self.acfg.time_limit - (time.time() - self.start_time)
+            ),
             "steps_remaining": str(self.acfg.steps - self.current_step),
-            "exec_timeout": humanize.naturaldelta(int(min(self.cfg.exec.timeout, self.acfg.time_limit - (time.time() - self.start_time)))),
+            "exec_timeout": humanize.naturaldelta(
+                int(
+                    min(
+                        self.cfg.exec.timeout,
+                        self.acfg.time_limit - (time.time() - self.start_time),
+                    )
+                )
+            ),
         }
-        
+
         # Try new two-phase approach first
         plan = self.plan_query("draft", user_messages, **variables)
         assert plan is not None, "Draft plan should not be None"
-        
+
         code = self.code_query("draft", plan, user_messages, **variables)
         assert code is not None, "Draft code should not be None"
-        
+
         new_node = Node(plan=plan, code=code)
         logger.info(f"Drafted new node {new_node.id} using new prompt system")
-        
+
         return new_node
-        
 
     def _improve(self, parent_node: Node, user_messages: List | None = None) -> Node:
         # Prepare variables for external prompts
@@ -254,24 +278,33 @@ class Agent:
             "task_desc": self.task_desc,
             "memory": self.journal.generate_summary(),
             "previous_solution": wrap_code(parent_node.code),
-            "time_remaining": format_time(self.acfg.time_limit - (time.time() - self.start_time)),
+            "time_remaining": format_time(
+                self.acfg.time_limit - (time.time() - self.start_time)
+            ),
             "steps_remaining": str(self.acfg.steps - self.current_step),
-            "exec_timeout": humanize.naturaldelta(int(min(self.cfg.exec.timeout, self.acfg.time_limit - (time.time() - self.start_time)))),
+            "exec_timeout": humanize.naturaldelta(
+                int(
+                    min(
+                        self.cfg.exec.timeout,
+                        self.acfg.time_limit - (time.time() - self.start_time),
+                    )
+                )
+            ),
         }
-        
-        
+
         # Try new two-phase approach first
         plan = self.plan_query("improve", user_messages, **variables)
         assert plan is not None, "Improve plan should not be None"
-        
+
         code = self.code_query("improve", plan, user_messages, **variables)
         assert code is not None, "Improve code should not be None"
-        
+
         new_node = Node(plan=plan, code=code, parent=parent_node)
-        logger.info(f"Improved node {parent_node.id} to create new node {new_node.id} using new prompt system")
-        
+        logger.info(
+            f"Improved node {parent_node.id} to create new node {new_node.id} using new prompt system"
+        )
+
         return new_node
-        
 
     def _debug(self, parent_node: Node, user_messages: List | None = None) -> Node:
         # Prepare variables for external prompts
@@ -280,21 +313,32 @@ class Agent:
             "buggy_code": wrap_code(parent_node.code),
             "execution_output": wrap_code(parent_node.term_out, lang=""),
             "data_preview": self.data_preview if self.acfg.data_preview else "",
-            "time_remaining": format_time(self.acfg.time_limit - (time.time() - self.start_time)),
+            "time_remaining": format_time(
+                self.acfg.time_limit - (time.time() - self.start_time)
+            ),
             "steps_remaining": str(self.acfg.steps - self.current_step),
-            "exec_timeout": humanize.naturaldelta(int(min(self.cfg.exec.timeout, self.acfg.time_limit - (time.time() - self.start_time)))),
+            "exec_timeout": humanize.naturaldelta(
+                int(
+                    min(
+                        self.cfg.exec.timeout,
+                        self.acfg.time_limit - (time.time() - self.start_time),
+                    )
+                )
+            ),
         }
-        
+
         # Try new two-phase approach first
         plan = self.plan_query("debug", user_messages, **variables)
         assert plan is not None, "Debug plan should not be None"
-        
+
         code = self.code_query("debug", plan, user_messages, **variables)
         assert code is not None, "Debug code should not be None"
 
         new_node = Node(plan=plan, code=code, parent=parent_node)
-        logger.info(f"Debugged node {parent_node.id} to create new node {new_node.id} using new prompt system")
-        
+        logger.info(
+            f"Debugged node {parent_node.id} to create new node {new_node.id} using new prompt system"
+        )
+
         return new_node
 
     def update_data_preview(
@@ -374,18 +418,26 @@ class Agent:
                 )
             else:
                 submission_dir = self.cfg.workspace_dir / "submission"
-                logger.info(f"DEBUG (step method): Checking submission directory: {submission_dir.resolve()}")
+                logger.info(
+                    f"DEBUG (step method): Checking submission directory: {submission_dir.resolve()}"
+                )
                 if submission_dir.exists():
                     contents = list(submission_dir.iterdir())
-                    logger.info(f"DEBUG (step method): Submission directory exists. Contents: {[p.name for p in contents]}")
+                    logger.info(
+                        f"DEBUG (step method): Submission directory exists. Contents: {[p.name for p in contents]}"
+                    )
                     if not contents:
-                        logger.info("DEBUG (step method): Submission directory is EMPTY.")
+                        logger.info(
+                            "DEBUG (step method): Submission directory is EMPTY."
+                        )
                     if any(submission_dir.iterdir()):
                         submission_exists = True
                 else:
                     submission_exists = False
-                    logger.info("DEBUG (step method): Submission directory does NOT exist.")
-            
+                    logger.info(
+                        "DEBUG (step method): Submission directory does NOT exist."
+                    )
+
             if not submission_exists:
                 result_node.is_buggy = True
                 result_node.metric = WorstMetricValue()
@@ -420,7 +472,9 @@ class Agent:
         logger.info(f"Agent is parsing execution results for node {node.id}")
         node.absorb_exec_result(exec_result)
 
-        logger.info(f"DEBUG (parse_exec_result): exec_result.term_out for node {node.id} (attempt {attempts}):\n{''.join(exec_result.term_out)}")
+        logger.info(
+            f"DEBUG (parse_exec_result): exec_result.term_out for node {node.id} (attempt {attempts}):\n{''.join(exec_result.term_out)}"
+        )
 
         introduction = (
             "You are a Kaggle grandmaster attending a competition. "
@@ -500,15 +554,25 @@ class Agent:
             )
         else:
             submission_dir = self.cfg.workspace_dir / "submission"
-            logger.info(f"DEBUG (parse_exec_result): Checking submission directory: {submission_dir.resolve()}")
+            logger.info(
+                f"DEBUG (parse_exec_result): Checking submission directory: {submission_dir.resolve()}"
+            )
             if submission_dir.exists():
                 contents = list(submission_dir.iterdir())
-                logger.info(f"DEBUG (parse_exec_result): Submission directory exists. Contents: {[p.name for p in contents]}")
+                logger.info(
+                    f"DEBUG (parse_exec_result): Submission directory exists. Contents: {[p.name for p in contents]}"
+                )
                 if not contents:
-                    logger.info("DEBUG (parse_exec_result): Submission directory is EMPTY.")
+                    logger.info(
+                        "DEBUG (parse_exec_result): Submission directory is EMPTY."
+                    )
             else:
-                logger.info("DEBUG (parse_exec_result): Submission directory does NOT exist.")
-            has_any_submission = submission_dir.exists() and any(submission_dir.iterdir())
+                logger.info(
+                    "DEBUG (parse_exec_result): Submission directory does NOT exist."
+                )
+            has_any_submission = submission_dir.exists() and any(
+                submission_dir.iterdir()
+            )
 
         node.analysis = response.summary
         node.is_buggy = (

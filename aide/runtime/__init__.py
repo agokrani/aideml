@@ -3,7 +3,9 @@ from aide.runtime.modal import ModalRuntime
 import modal as modal
 
 
-def get_runtime(workspace_dir, cfg, task_id=None, preprocess_data=False, use_symlinks=False):
+def get_runtime(
+    workspace_dir, cfg, task_id=None, preprocess_data=False, use_symlinks=False
+):
     if cfg.use_modal:
         gpu = None
         if cfg.gpu is not None:

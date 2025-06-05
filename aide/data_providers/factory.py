@@ -14,18 +14,18 @@ if TYPE_CHECKING:
 def create_data_provider(cfg: "Config") -> DataProvider:
     """
     Create appropriate data provider based on config.
-    
+
     Args:
         cfg: Configuration object
-        
+
     Returns:
         DataProvider instance
-        
+
     Raises:
         ValueError: If no valid data source is specified
     """
     # New format with provider specification
-    if hasattr(cfg, 'data') and cfg.data:
+    if hasattr(cfg, "data") and cfg.data:
         if cfg.data.provider == "local":
             if not cfg.data.path:
                 raise ValueError("Local provider requires 'path' field")
@@ -36,9 +36,11 @@ def create_data_provider(cfg: "Config") -> DataProvider:
             return KaggleProvider(cfg.data.dataset)
         else:
             raise ValueError(f"Unknown provider: {cfg.data.provider}")
-    
+
     # Legacy format - local provider
     if cfg.data_dir:
         return LocalDataProvider(cfg.data_dir)
-    
-    raise ValueError("No valid data source specified. Use either 'data_dir' or 'data' config.")
+
+    raise ValueError(
+        "No valid data source specified. Use either 'data_dir' or 'data' config."
+    )

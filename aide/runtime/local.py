@@ -127,7 +127,7 @@ class LocalRuntime(Runtime):
             for file_path in submission_dir.iterdir():
                 if file_path.is_file():
                     shutil.copy(file_path, best_submission_dir)
-        
+
         # Save solution code
         with open(best_solution_dir / "solution.py", "w") as f:
             f.write(node.code)

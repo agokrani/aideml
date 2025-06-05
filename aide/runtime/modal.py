@@ -26,7 +26,7 @@ class ModalRuntime(Runtime):
         volume_name="agent-volume",
         agent_file_name: str = "runfile.py",
         debug: bool = True,
-        use_symlinks: bool = False
+        use_symlinks: bool = False,
     ):
         self.working_dir = Path(working_dir).resolve()
         assert (
@@ -51,7 +51,6 @@ class ModalRuntime(Runtime):
         self.use_symlinks = use_symlinks
         self.process = self._create_sandbox()  # type: ignore
         self.debug = debug
-        
 
     def _create_sandbox(self) -> modal.Sandbox:
         agent_image = modal.Image.debian_slim(
@@ -79,10 +78,8 @@ class ModalRuntime(Runtime):
             if not self.use_symlinks:
                 res = sandbox.exec("cp", "-r", f"/vol/tasks/{self.task_id}", "input")
                 res.wait()
-            else: 
-                res = sandbox.exec(
-                    "ln", "-s", f"/vol/tasks/{self.task_id}", "input"
-                )
+            else:
+                res = sandbox.exec("ln", "-s", f"/vol/tasks/{self.task_id}", "input")
                 res.wait()
             if self.preprocess_data:
                 res = sandbox.exec(
@@ -168,8 +165,8 @@ class ModalRuntime(Runtime):
         # Create best solution and submission directories in sandboxed env
         best_solution_dir = f"{self.modal_working_dir}/best_solution"
         best_submission_dir = f"{self.modal_working_dir}/best_submission"
-        
-            # Check if directories exist and create them if they don't
+
+        # Check if directories exist and create them if they don't
         try:
             dir_listings = self.process.ls(".")
             if "best_solution" not in dir_listings:
@@ -180,7 +177,7 @@ class ModalRuntime(Runtime):
             logger.error(f"Error checking/creating directories: {str(e)}")
             # Continue anyway - if the directories already exist, we can still try to write files
 
-        # # Failing cause no exist_ok directory for Modal sandbox mkdir 
+        # # Failing cause no exist_ok directory for Modal sandbox mkdir
         # self.process.mkdir(best_solution_dir, exist_ok=True)
         # self.process.mkdir(best_submission_dir, exist_ok=True)
 
@@ -203,9 +200,8 @@ class ModalRuntime(Runtime):
         except Exception as e:
             logger.error(f"Error saving solution code: {str(e)}")
 
-
         # Save node ID
-        try: 
+        try:
             f = self.process.open(f"{best_solution_dir}/node_id.txt", "w")
             f.write(str(node.id))
             f.close()
